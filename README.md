@@ -156,19 +156,11 @@
 
 ### 5. Визуализация контекста системы — диаграмма С4
 
-Добавьте сюда диаграмму контекста в модели C4.
+[C4 Контекстная диаграмма новой системы на сайте PlantULM](https://editor.plantuml.com/uml/TLNBRjj84BphAtfr2GN84XR8oPUDr_R6njg9ifGHP270699jSR3p46Q6OdJBH-GByoLRmvSeEG4CM-mPLrTrLLFlV10kL5hHzTldQsi2VmsJD_J0UrRqE_tuzftIWm-iwNXuPNpDpbzINLggF7iA9PDlhmbJe2xpad2PdH6gE_5KM5oLWII0dCW3rJAKVqJ000JfIJLT8nYR81tJJedmOfqc70hoqcmLKsQ_DhmQ6E17O38sa1O1bSNaDsboLHLCPGWxVxbSEb4ljkXLPM3hyYZ4X4LkzH8DJ5H_uKEXPBQyVdknYgMdnuUb5g3jbiUvB7QuEPayN7tv-BH-_do_ldj-k7r_--4ccKqcGGPmwsxIZHHR9tJ3S_fPGC6THUyfhNf5oTfU_CdunpVqu_ktzgSVTMJfZ-N92e_M9B4yf-aJ_cnCKbhDP6l3RZP5zL4OiUsjqF2KueNBZIbuBtFsS_8v6-6azVCDI2hM7DoXyGl3aoyo5q5QuwUplfyej3I0xZblp5MiI1-S2DQTT-tD0dmh84Blm0GKgMMnCT4qJARlTAB-O-Nw51srjoD96abtK3GVptCOP-II3gef5I8T-2p0MobR-swkmI8w1UyOlqnGXur18WmZZyEeK7YHsyg1y32rHivUSat3yCu5t9ud_bp6CsuaGvUESLH5DsqnwbYL1myprDdi_6MqJU-mEW7CoBFnrW76iHA7I5fed4LtM_-LpVz36TOuRR7c0GySyWLOZzYClLyvkvS5Hz3fXr6TXeFf-Kd1IkuPES9eUvP_ONKp0NUINUNBsPpMjLJIKf8-fZFGIp7vzquMbB0MKiqYTQNyAQ-TE6ZOqrRYLDhdRaMQEJcBVl7rqztr1BjRxtsL-Tp9NUG8_syNsmMb0GMiZAClrlujl1Vd_jrtBwOOpf5t_x3gTc-SmZxwPVFOURGnCIN7pEobe9gpfRQPL1nPtwtNgnID8sYtO6FKwpvvfplLukgkvSaIZJ0Rq17QA6aOkKUiDI2APWLE23lE6JRwKRIZma_hDItfiNcjuiE_SfinuqFirqaOTVjLajhU9-yO9DbssoWoMmNibjL2IMwt35y3S7DGXevNg_lN3Lz5v5KWDYOc8ZOwISHFe2Vlm3A-tly7)
 
-Чтобы добавить ссылку в файл Readme.md, нужно использовать синтаксис Markdown. Это делают так:
+[C4 Контекстная диаграмма новой системы в папке со схемами](schemas/c4_context.puml)
 
-```markdown
-[Текст ссылки](URL)
-```
-
-Замените `Текст ссылки` текстом, который хотите использовать для ссылки. Вместо `URL` вставьте адрес, на который должна вести ссылка. Например:
-
-```markdown
-[Посетите Яндекс](https://ya.ru/)
-```
+<img src="schemas/c4_context_diagram.png" alt="C4 контекстная диаграмма" width="50%">
 
 # Задание 2. Проектирование микросервисной архитектуры
 
