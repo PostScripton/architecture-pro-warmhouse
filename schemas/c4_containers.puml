@@ -1,0 +1,97 @@
+@startuml C4_Containers
+' Level 2 — Containers
+' Zoom into our system. Show all separately deployable units:
+' microservices, frontends, databases, message broker.
+' "Container" in C4 ≠ Docker container. It is any independently deployable unit.
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Container Diagram — Warm House Platform (To-Be)
+
+' ─── Users ───
+Person(user, "User", "Smart home owner")
+Person(admin, "Administrator", "Manages the platform")
+
+' ─── External Systems ───
+System_Ext(devices, "Smart Home Devices", "Partners' physical devices")
+System_Ext(notificationProviders, "Notification Providers", "Firebase, Twilio, SendGrid, etc.")
+System_Ext(paymentSystem, "Payment System", "Stripe / YooKassa")
+
+' ─── Our Platform ───
+System_Boundary(smartHome, "Warm House Platform") {
+
+    ' Client applications
+    Container(webApp, "Web App", "React / TypeScript", "SPA for managing the smart home in a browser")
+    Container(mobileApp, "Mobile App", "React Native", "Mobile application for iOS and Android")
+
+    ' Single entry point
+    Container(apiGateway, "API Gateway", "Go / nginx", "Request routing, token authentication,\nrate limiting, SSL termination")
+
+    ' Microservices
+    Container(authService, "Auth Service", "Go", "Registration, login, issuance and validation\nof JWT tokens. Role management.")
+    Container(homeService, "Home Management Service", "Go", "Management of homes, rooms\nand resident invitations")
+    Container(deviceService, "Device Management Service", "Go", "User device onboarding,\nbinding to home/room,\nsending commands to devices")
+    Container(telemetryService, "Telemetry Service", "Go", "Receiving and storing telemetry from devices.\nAnomaly detection.")
+    Container(scriptService, "Script Service", "Go", "Creating and executing automation\nscripts by schedule and triggers")
+    Container(notificationService, "Notification Service", "Go", "Managing channels (SMS/push/email)\nand sending notifications to users")
+    Container(billingService, "Billing Service", "Go", "SaaS subscription management:\nplans, payments, plan-based limits")
+
+    ' Async transport
+    Container(messageBroker, "Message Broker", "Apache Kafka", "Asynchronous event exchange between\nmicroservices. Topics: device.events,\ntelemetry.measurements, anomaly.detected")
+
+    ' Databases (one per service — Database per Service)
+    ContainerDb(authDb, "Auth DB", "PostgreSQL", "Users, password hashes,\nroles, refresh tokens")
+    ContainerDb(homeDb, "Home DB", "PostgreSQL", "Homes, rooms,\nresident lists")
+    ContainerDb(deviceDb, "Device DB", "PostgreSQL", "Devices, types, states,\nbindings to homes and rooms")
+    ContainerDb(telemetryDb, "Telemetry DB", "TimescaleDB", "Time-series sensor readings.\nTimescaleDB chosen for efficient\nstorage and queries over time-series data")
+    ContainerDb(scriptDb, "Script DB", "PostgreSQL", "Scripts, schedules, triggers")
+    ContainerDb(notificationDb, "Notification DB", "PostgreSQL", "Channels, subscriptions,\nhistory of sent notifications")
+    ContainerDb(billingDb, "Billing DB", "PostgreSQL", "Subscriptions, plans,\npayment history")
+}
+
+' ─── Users → Clients ───
+Rel(user, webApp, "Uses", "HTTPS")
+Rel(user, mobileApp, "Uses", "HTTPS")
+Rel(admin, webApp, "Administers the platform", "HTTPS")
+
+' ─── Clients → Gateway ───
+Rel(webApp, apiGateway, "REST requests", "HTTPS / JSON")
+Rel(mobileApp, apiGateway, "REST requests", "HTTPS / JSON")
+
+' ─── Gateway → Microservices ───
+' Gateway validates the token via Auth Service, then proxies the request to the target service
+Rel(apiGateway, authService, "Token validation,\nregistration/login", "gRPC")
+Rel(apiGateway, homeService, "Home and room\nmanagement", "gRPC")
+Rel(apiGateway, deviceService, "Device onboarding\nand management", "gRPC")
+Rel(apiGateway, telemetryService, "Fetching telemetry\nand reading history", "gRPC")
+Rel(apiGateway, scriptService, "Script and schedule\nmanagement", "gRPC")
+Rel(apiGateway, notificationService, "Notification channel\nconfiguration", "gRPC")
+Rel(apiGateway, billingService, "Subscription management", "gRPC")
+
+' ─── Microservices → Databases ───
+Rel(authService, authDb, "Reads / writes", "SQL")
+Rel(homeService, homeDb, "Reads / writes", "SQL")
+Rel(deviceService, deviceDb, "Reads / writes", "SQL")
+Rel(telemetryService, telemetryDb, "Reads / writes", "SQL")
+Rel(scriptService, scriptDb, "Reads / writes", "SQL")
+Rel(notificationService, notificationDb, "Reads / writes", "SQL")
+Rel(billingService, billingDb, "Reads / writes", "SQL")
+
+' ─── Microservices → Broker ───
+' Device Service publishes device state change events
+Rel(deviceService, messageBroker, "Publishes: device.events", "Kafka Producer")
+' Telemetry Service publishes anomalies
+Rel(telemetryService, messageBroker, "Publishes: anomaly.detected\nSubscribes: device.events", "Kafka")
+' Script Service reacts to events and anomalies to trigger scripts
+Rel(scriptService, messageBroker, "Subscribes: device.events,\nanomaly.detected", "Kafka Consumer")
+' Notification Service sends notifications based on events
+Rel(notificationService, messageBroker, "Subscribes: anomaly.detected,\ndevice.events", "Kafka Consumer")
+
+' ─── External World Interactions ───
+Rel(deviceService, devices, "Sends commands\nto devices", "MQTT / HTTP")
+Rel(telemetryService, devices, "Receives telemetry\nfrom sensors", "MQTT")
+Rel(notificationService, notificationProviders, "Sends push, SMS, email", "HTTPS / API")
+Rel(billingService, paymentSystem, "Processes subscription\npayments", "HTTPS / API")
+
+@enduml
