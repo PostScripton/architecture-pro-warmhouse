@@ -215,7 +215,70 @@
 
 # Задание 3. Разработка ER-диаграммы
 
-Добавьте сюда ER-диаграмму. Она должна отражать ключевые сущности системы, их атрибуты и тип связей между ними.
+Раздел содержит две диаграммы: **общую** (ключевые доменные сущности и связи) и **детальную** (все сущности в разрезе баз данных микросервисов).
+
+## Общая ER-диаграмма
+
+Показывает ключевые доменные сущности системы, их атрибуты и типы связей между ними.
+
+### Сущности
+
+| Сущность | Описание |
+|---|---|
+| `User` | Пользователь системы. Владеет одним или несколькими домами. |
+| `House` | Дом, к которому подключены устройства. Принадлежит одному пользователю. |
+| `Module` | Логическая зона внутри дома (комната, этаж и т.п.). Группирует устройства по местоположению. |
+| `DeviceType` | Тип устройства — описывает протокол подключения и производителя. |
+| `Device` | Физическое устройство умного дома. Принадлежит дому, может быть назначено в модуль. |
+| `TelemetryData` | Показания датчиков устройства во времени (time-series). |
+
+### Связи
+
+| Связь | Тип | Описание |
+|---|-----|---|
+| `User` → `House` | 1:M | Один пользователь может владеть несколькими домами; каждый дом принадлежит одному владельцу |
+| `House` → `Module` | 1:M | Один дом содержит несколько модулей (комнат); каждый модуль принадлежит одному дому |
+| `House` → `Device` | 1:M | Один дом содержит несколько устройств; каждое устройство привязано к одному дому |
+| `Module` → `Device` | 1:M | Один модуль группирует несколько устройств; устройство может не быть назначено ни в один модуль |
+| `DeviceType` → `Device` | 1:M | Один тип классифицирует несколько устройств; каждое устройство имеет ровно один тип |
+| `Device` → `TelemetryData` | 1:M | Одно устройство генерирует множество записей телеметрии |
+
+[Общая ER-диаграмма на сайте PlantUML](https://editor.plantuml.com/uml/rLVTRjis5BxNKvnr5us7sCKmx69P4TI9bCMOFHkslAsxCMZfs292aGP9DN6R0Ns8Fc6VP8SKxVe7GRmxHV0D3yNpdJz-_lJEMAPjLGf8nhEOiwLcPVIQ5X0MyFNp5_YBwH9kLMKGHeBPXQBbMQhQLzYYb_jgoJCc86UMGQbo51TmXsj0QRdbQCw1MQlvlB9eWCaSD98JhgGf-0hiUeMc4qNVvRZWaW1-FtjemTlgyk7jc-foQxwfpToP-MKK5Jn7AD4MAZVrmbZKgBoxoDnnkM8kV467dGsKfdTtDdnqQ_WK0JrNBBjRQbN9_5e9fU7xc-GckKxgFQLprC7-Yt-ylQkrkW_cd_tZpJTAsWd_YF3ZJz6_KKGW0lzFFQcWNxzyRiAF8fbEad630WezcnhKeN4_k7dXUGikO3hjnTxMReSjB1aNj9CcVwV1j6B6t5D3PmKpnVwMP2NkMpADp68-OzRPUuDaadO7e_GVrzVc5EKrt0wfJmsAABIf7l0J-aHtMzrBrBE35uvxml9Sep6x9ijB_AZa2stTO1XF-yaEYVfKk3IEqHWKleHdMgdo71P24TSmokmSq6QTLeVE_KQijJAGumUU4RtEro1KvjaLxhajk0HROEsdqw3CmuWCL5w9KsV49_7yZ7YsVv7342T_zguJID-F6dYROpzXgIlk2Uqw9jELLbPbQe-FIoQh1SjifOdGNt3B6XJINhTEl5ZknXpVgwTk7DbBVssFZz3_CcTY9gjoVjXGqfcsCY-poMdIJmP9EduFSJVjEWFzvxHTiiIub4FEvTB0Ggioy30LGXgbZMFSYLKQSw9qVyeGnsDy1MS5rLnRDYVs8yxMc3cLwKhHQY1DfoYGjBPUnqxYdpPKTIMEPyJvuTd-87nWed9q4G-dL_q4HkFakZVf3Vy8svNaTl_0JhsQFJhZfDzDAPF9RMyqQL1a5CgGX4Rbb7J6993-Wh8Ibgz4K0lcLte7MLO44J97eToOMmNuG9mjrk2aYXTkdSXByiV7Tbjz2hhl0bxHddcrWQgzPFHrn4ZUV0EhkSJK8iUySVh7jBROzUvJu47Mr801FKWAWjzWFHj244zRq729ESafzqbu2chWsqFKxiPNoUZioiao9iZDdCITCNmfqNjdcpnz4Nps3YWONN-2rwEOEr78zr4TnB7qmd2RUuZ3YwDCEF25Ow_dQa2VINkvk_ETQ4SB7EU_TNw8lKGQ5MPtKUs6MCAD_ePVhvzgVErn4yWcY7sQSZNO858exr3cLIcY_m00)
+
+[Общая ER-диаграмма в папке со схемами](schemas/er_diagram.puml)
+
+<img src="schemas/er_diagram.png" alt="Общая ER-диаграмма" width="33%">
+
+## Детальная ER-диаграмма (Database per Service)
+
+Показывает все сущности в разрезе баз данных микросервисов. Поскольку архитектура построена по принципу **Database per Service**, сущности сгруппированы по границам баз данных соответствующих микросервисов.
+
+### Границы баз данных и ключевые сущности
+
+| База данных | Ключевые сущности |
+|---|---|
+| **Auth DB** (PostgreSQL) | `users`, `roles`, `user_roles`, `refresh_tokens` |
+| **Home DB** (PostgreSQL) | `homes`, `rooms`, `home_members` |
+| **Device DB** (PostgreSQL) | `device_types`, `devices`, `device_bindings`, `device_states`, `modules` |
+| **Telemetry DB** (TimescaleDB) | `measurements` (hypertable), `anomalies` |
+| **Script DB** (PostgreSQL) | `scripts`, `script_actions`, `schedules`, `triggers` |
+| **Notification DB** (PostgreSQL) | `notification_channels`, `subscriptions`, `notification_history` |
+| **Billing DB** (PostgreSQL) | `plans`, `billing_subscriptions`, `payments` |
+
+### Ключевые архитектурные решения в модели данных
+
+- **Database per Service**: каждый сервис владеет своей схемой. Межсервисные ссылки (например, `user_id` в `homes`) хранятся как обычные UUID-поля без FK-констрейнтов — целостность обеспечивается на уровне приложения и событийной модели.
+- **TimescaleDB для телеметрии**: таблица `measurements` является hypertable, секционированной по `recorded_at`. Это обеспечивает эффективное хранение и агрегацию time-series данных от тысяч датчиков.
+- **JSONB для гибкого payload**: `device_states.payload`, `script_actions.payload` и `triggers.condition` хранятся как JSONB, что позволяет поддерживать произвольные команды и условия без изменения схемы при добавлении новых типов устройств.
+- **Soft delete для привязок устройств**: `device_bindings.unbound_at` позволяет хранить историю привязок устройств к домам и комнатам без фактического удаления записей.
+- **Модуль как виртуальное устройство**: `modules` позволяет объединять несколько физических устройств в одно логическое (один-ко-многим: `module_id` на `devices`) — например, несколько лампочек образуют люстру или торшер. Команда, отправленная модулю, транслируется всем входящим в него устройствам.
+- **TEXT вместо VARCHAR(n)**: в PostgreSQL `VARCHAR(n)` и `TEXT` хранятся идентично (тип varlena) — одинаковая структура хранения, одинаковая индексируемость, одинаковый объём памяти. Единственное отличие `VARCHAR(n)` — дополнительный CHECK-констрейнт на длину, который не даёт выигрыша в производительности. Ограничения на длину лучше держать на уровне приложения, а не фиксировать в схеме БД.
+
+[Детальная ER-диаграмма на сайте PlantUML](https://editor.plantuml.com/uml/rHhRRk96z9slcB8F3Tj4JLVTQXj5qKAmDxGaq41wqqhMO0zu57l66ez9w2PIFw4FxG_kb_ICRS3OWnFJL39ENdpcUERSRyFxK68X8zz3nhNLfNWciD_u4bvG-e8-__at-WKB7rtmA2Hew64vvV1wCEP77T82v97Bxq9qInQ8C4ab9U4XaYwX0c4f1Pr4Ka4mSv0Wy3NbB7HfWEGY825y_a7mA20EcYoGJst1GoBcr2R8mH9FC1mvuH5pi81zqK5t2Go8GAC4izLeVE6GAMK4ZTkTld70i4yE7HBQhOIY1L8GX4FKLD0cEZq5yWzVcMORdXOwErjjCFpnuBw5JgEp-zElepNOJC1KWUbPe-5IXo2VI9SxOV8IIY88JtWARoaBi1AU1nyh6E82S3CBALsV6WYU3hPlPq9nUSuzBj0hqp2DSoDPuy8X8eL_7pynl2q4lql1tyLFup6pVm1RuXafxlnE_MaGiyUquwVH018zKiKMG9kV__chFlz0J_jcV86wdTfHbieTDTkHT850T33aePm9ClgftsgYLuPXVckQO22njbDp0Q6BC3KQzRnMzagT5Zf1DpUzxWf-T9H18Jwc7c2CZL_76N20m_0Ej6wvE7IBoxOWM1B7mbAjzIwDqRXzEHp_da690cSxokC6uO9xf3BXiTFc25F-AsYWWaXswR4W9ajx9FXnl0X75yvU8gWFjGWRn87qw8mzatio5IHqBSbl2QiiXWpDHPBZBRUeaDm75CujK-6JMXPa3YSuiDeP3Ff6-ofbxx6Eldunk3HgxUiN72owwElciMcQnpbVTm6tigtmEmQMaffBqLfq7eKT1umap8CbzSaVd1NGdx2PlDjpVnTxLxphxLt7mTJZaBLEqEYotU_thdQaDJxJ9_vaXn1RIl9MRQX0KnGlPNDQwfBOjabGmbGjNRDh_DmxhxTpTabSTchSqpGxXf5pJoV6jkA2xoKI6oHamIMtUI5L-vX5KspBI13ndxmn8NaNurPSwemRbdpkH5u5PmLdeDYpMAGShSYE83CQbz8LEB8cb3cKpNRXBDr1Itxgqla55TIq_ln4y8tRcErk7R4I12tRqBh9dTHPnhJQD2faWm0lF8uLKp-C1bUTtOh0n5Gg4xn53NhpYfkjgavIouWvDlh6fJ6-_gtMGNDCF09zi5Z4SNCCHKDeOuzqEsdWF3RVvWAdJt08eSo7rygci3BSeZ4e8gXTLFqSUv6oYExWfjCtqF3QEE-DUeEhh0apAdMHo5OzyRCi6pFkOuzMj-qT65AP00Beatn1zKziPVG-PS_3m_TbU26PG-W6PWiKEKGcEvHq4I7tvdlcWAFpwzvmN6ll6yMziAvaUQjwYfpd9PrpPHlTcj0g1UOjZNlo0M5uuXMwp6IjGe6Jd621XwWPumw9CTr0cnXBNDNclg_6cyzEcl6mBT-nv7bnoKxfyWasRC6P1JwlUZwDBbwaxOF0DPljraQLaGu1Y4bBb-5j3WLWQbfvMUzZxhyQZ7jcxxmzXW1Swm1qnIMTKZiUwki76-yAOOXblh5i5pD6l9SBIle2SCkG0ye3o6bJ-WAX9vgiujlBCGCEaGgegaTK8dv38oxqNrmiQi43L9EXihF2WhvB0RZQQvyylTDJ2U13hPsyGpqFsclzPEHjOJ8IUBYw2-XA1YX8hUNCuWH1cZG-6DSRgycCjBYcXYagMVkSITTJ9MiNobb8jWVV71--QQtpHYG4ORQcfgtWFPD4FDR_5WAKGAiqwp5Sb1RafLS3c-n15RDJhwQIUKOYUWQmpoCcj-hdTOc60i7dr2dEa9PmIzud0drcw0WmtQyYuThenmN2wA8t7CLNi-bLOkreJQuj7nwEZlYdxENS2MgwE6msaZVj-lAQ3KdUtDmdTwcstAjspEiKbTu3rOxM99uk1HnVte1SeRgMc38GxiRwneN9Neb_DUcl7RKRjmgfdDSfi6bxoX-WNWL9By4RMEjHE637ysGqftWJ-U4XDq1ET9U6MjbiBEUqclCXiq5v628-tHDLP-UJjIDuOnJwo6FLh4U98Ezb8_sH7KmMcGd4Ln-PQjJH7MYRtxNsH1UhQLNjg5rEnbABpysHDa9W0NKvfbchA_ujMm5pDHGf8DPE73hbvJhzsj6idoeijRHHceC2e99m46NDyi-qVN7swzf9GQUvTVjMEtAJLZ6LjhwFKZNW75DF3OXZcUlHqZrMpGfyfWhw9FirtXFcHBxN-1S0)
+
+[Детальная ER-диаграмма в папке со схемами](schemas/er_diagram_detailed.puml)
+
+<img src="schemas/er_diagram_detailed.png" alt="Детальная ER-диаграмма" width="100%">
 
 # Задание 4. Создание и документирование API
 

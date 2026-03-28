@@ -1,0 +1,345 @@
+@startuml ER_Diagram
+' ER Diagram — Warm House Platform (To-Be)
+' Shows key entities, their attributes, and relationship types
+' Grouped by microservice database boundaries (Database per Service)
+
+!define TABLE(name,desc) entity name as "desc" << (T,#FFAAAA) >>
+!define PK(x) <u>x</u>
+!define FK(x) <i>x</i>
+
+hide methods
+hide stereotypes
+skinparam linetype ortho
+skinparam entity {
+    BackgroundColor #FEFECE
+    BorderColor #999999
+    ArrowColor #666666
+}
+skinparam packageBackgroundColor #F8F8F8
+skinparam packageBorderColor #AAAAAA
+
+title ER Diagram — Warm House Platform (To-Be)
+
+' ═══════════════════════════════════════════════
+' AUTH DB
+' ═══════════════════════════════════════════════
+package "Auth DB (PostgreSQL)" #EEF4FF {
+
+    entity users {
+        * PK(id) : UUID
+        --
+        * email : TEXT
+        * password_hash : TEXT
+        * created_at : TIMESTAMPTZ
+        * updated_at : TIMESTAMPTZ
+    }
+
+    entity roles {
+        * PK(id) : UUID
+        --
+        * name : TEXT
+        description : TEXT
+    }
+
+    entity user_roles {
+        * PK(FK(user_id)) : UUID
+        * PK(FK(role_id)) : UUID
+        --
+        * assigned_at : TIMESTAMPTZ
+    }
+
+    entity refresh_tokens {
+        * PK(id) : UUID
+        --
+        * FK(user_id) : UUID
+        * token_hash : TEXT
+        * expires_at : TIMESTAMPTZ
+        * created_at : TIMESTAMPTZ
+        revoked : BOOLEAN
+    }
+}
+
+' ═══════════════════════════════════════════════
+' HOME DB
+' ═══════════════════════════════════════════════
+package "Home DB (PostgreSQL)" #F0FFF0 {
+
+    entity homes {
+        * PK(id) : UUID
+        --
+        * owner_user_id : UUID
+        * name : TEXT
+        address : TEXT
+        timezone : TEXT
+        * created_at : TIMESTAMPTZ
+    }
+
+    entity rooms {
+        * PK(id) : UUID
+        --
+        * FK(home_id) : UUID
+        * name : TEXT
+        floor : SMALLINT
+        * created_at : TIMESTAMPTZ
+    }
+
+    entity home_members {
+        * PK(id) : UUID
+        --
+        * FK(home_id) : UUID
+        * user_id : UUID
+        * role : TEXT
+        * invited_at : TIMESTAMPTZ
+        accepted_at : TIMESTAMPTZ
+    }
+}
+
+' ═══════════════════════════════════════════════
+' DEVICE DB
+' ═══════════════════════════════════════════════
+package "Device DB (PostgreSQL)" #FFFBEE {
+
+    entity device_types {
+        * PK(id) : UUID
+        --
+        * name : TEXT
+        * protocol : TEXT
+        manufacturer : TEXT
+        * created_at : TIMESTAMPTZ
+    }
+
+    entity devices {
+        * PK(id) : UUID
+        --
+        * FK(type_id) : UUID
+        FK(module_id) : UUID
+        * name : TEXT
+        serial_number : TEXT
+        * registered_at : TIMESTAMPTZ
+    }
+
+    entity device_bindings {
+        * PK(id) : UUID
+        --
+        * FK(device_id) : UUID
+        * home_id : UUID
+        room_id : UUID
+        * owner_user_id : UUID
+        * bound_at : TIMESTAMPTZ
+        unbound_at : TIMESTAMPTZ
+    }
+
+    entity device_states {
+        * PK(id) : UUID
+        --
+        * FK(device_id) : UUID
+        * status : TEXT
+        payload : JSONB
+        * updated_at : TIMESTAMPTZ
+    }
+
+    entity modules {
+        * PK(id) : UUID
+        --
+        * home_id : UUID
+        * name : TEXT
+        type : TEXT
+        * created_at : TIMESTAMPTZ
+    }
+}
+
+' ═══════════════════════════════════════════════
+' TELEMETRY DB
+' ═══════════════════════════════════════════════
+package "Telemetry DB (TimescaleDB)" #FFF0F5 {
+
+    entity measurements {
+        * PK(id) : UUID
+        --
+        * device_id : UUID
+        * metric : TEXT
+        * value : DOUBLE PRECISION
+        * unit : TEXT
+        * recorded_at : TIMESTAMPTZ
+    }
+
+    entity anomalies {
+        * PK(id) : UUID
+        --
+        * device_id : UUID
+        * metric : TEXT
+        * actual_value : DOUBLE PRECISION
+        expected_min : DOUBLE PRECISION
+        expected_max : DOUBLE PRECISION
+        severity : TEXT
+        * detected_at : TIMESTAMPTZ
+        resolved_at : TIMESTAMPTZ
+    }
+}
+
+' ═══════════════════════════════════════════════
+' SCRIPT DB
+' ═══════════════════════════════════════════════
+package "Script DB (PostgreSQL)" #F5F0FF {
+
+    entity scripts {
+        * PK(id) : UUID
+        --
+        * user_id : UUID
+        * home_id : UUID
+        * name : TEXT
+        description : TEXT
+        * enabled : BOOLEAN
+        * created_at : TIMESTAMPTZ
+    }
+
+    entity script_actions {
+        * PK(id) : UUID
+        --
+        * FK(script_id) : UUID
+        * device_id : UUID
+        * command : TEXT
+        payload : JSONB
+        * order : SMALLINT
+    }
+
+    entity schedules {
+        * PK(id) : UUID
+        --
+        * FK(script_id) : UUID
+        * cron_expression : TEXT
+        timezone : TEXT
+        * created_at : TIMESTAMPTZ
+    }
+
+    entity triggers {
+        * PK(id) : UUID
+        --
+        * FK(script_id) : UUID
+        * event_type : TEXT
+        condition : JSONB
+        * created_at : TIMESTAMPTZ
+    }
+}
+
+' ═══════════════════════════════════════════════
+' NOTIFICATION DB
+' ═══════════════════════════════════════════════
+package "Notification DB (PostgreSQL)" #F0F8FF {
+
+    entity notification_channels {
+        * PK(id) : UUID
+        --
+        * user_id : UUID
+        * type : TEXT
+        * address : TEXT
+        * verified : BOOLEAN
+        * created_at : TIMESTAMPTZ
+    }
+
+    entity subscriptions {
+        * PK(id) : UUID
+        --
+        * user_id : UUID
+        * FK(channel_id) : UUID
+        * event_type : TEXT
+        * created_at : TIMESTAMPTZ
+    }
+
+    entity notification_history {
+        * PK(id) : UUID
+        --
+        * user_id : UUID
+        * FK(channel_id) : UUID
+        * event_type : TEXT
+        * message : TEXT
+        * status : TEXT
+        * sent_at : TIMESTAMPTZ
+    }
+}
+
+' ═══════════════════════════════════════════════
+' BILLING DB
+' ═══════════════════════════════════════════════
+package "Billing DB (PostgreSQL)" #FFF5EE {
+
+    entity plans {
+        * PK(id) : UUID
+        --
+        * name : TEXT
+        max_devices : INTEGER
+        max_homes : INTEGER
+        * price_monthly : DECIMAL(10,2)
+        currency : TEXT
+        * created_at : TIMESTAMPTZ
+    }
+
+    entity billing_subscriptions {
+        * PK(id) : UUID
+        --
+        * user_id : UUID
+        * FK(plan_id) : UUID
+        * status : TEXT
+        * started_at : TIMESTAMPTZ
+        expires_at : TIMESTAMPTZ
+    }
+
+    entity payments {
+        * PK(id) : UUID
+        --
+        * FK(subscription_id) : UUID
+        * amount : DECIMAL(10,2)
+        * currency : TEXT
+        * provider : TEXT
+        provider_tx_id : TEXT
+        * status : TEXT
+        * paid_at : TIMESTAMPTZ
+    }
+}
+
+' ═══════════════════════════════════════════════
+' RELATIONSHIPS — Auth DB
+' ═══════════════════════════════════════════════
+users ||--o{ user_roles : "has"
+roles ||--o{ user_roles : "assigned to"
+users ||--o{ refresh_tokens : "has"
+
+' ═══════════════════════════════════════════════
+' RELATIONSHIPS — Home DB
+' ═══════════════════════════════════════════════
+homes ||--o{ rooms : "contains"
+homes ||--o{ home_members : "has"
+
+' ═══════════════════════════════════════════════
+' RELATIONSHIPS — Device DB
+' ═══════════════════════════════════════════════
+device_types ||--o{ devices : "classifies"
+devices ||--o{ device_bindings : "bound via"
+devices ||--|| device_states : "has current"
+modules ||--o{ devices : "consists of"
+
+' ═══════════════════════════════════════════════
+' RELATIONSHIPS — Telemetry DB
+' ═══════════════════════════════════════════════
+measurements }o--|| anomalies : "triggers\n(by device_id +\ntime window)"
+
+' ═══════════════════════════════════════════════
+' RELATIONSHIPS — Script DB
+' ═══════════════════════════════════════════════
+scripts ||--o{ script_actions : "contains"
+scripts ||--o{ schedules : "triggered by"
+scripts ||--o{ triggers : "triggered by"
+
+' ═══════════════════════════════════════════════
+' RELATIONSHIPS — Notification DB
+' ═══════════════════════════════════════════════
+notification_channels ||--o{ subscriptions : "used in"
+notification_channels ||--o{ notification_history : "used in"
+
+' ═══════════════════════════════════════════════
+' RELATIONSHIPS — Billing DB
+' ═══════════════════════════════════════════════
+plans ||--o{ billing_subscriptions : "available in"
+billing_subscriptions ||--o{ payments : "paid via"
+
+@enduml
