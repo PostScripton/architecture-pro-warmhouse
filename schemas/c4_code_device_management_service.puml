@@ -1,0 +1,122 @@
+@startuml C4_Code_DeviceRepository
+' Level 4 — Code
+' Zoom into the Device Repository component.
+' Show the key architectural abstraction: interface + two implementations.
+' This pattern (Repository Interface) solves the monolith problem
+' where SQL was scattered across all code and replacing the DB was impossible.
+
+title Class Diagram — Device Repository (Device Management Service)
+
+' ─── Repository Interface ───
+' Business logic (services) depends only on the interface, not the concrete implementation.
+' Allows changing the DB without modifying logic and writing unit tests with mock implementations.
+interface DeviceRepository {
+    + FindByID(ctx Context, id DeviceID) : Device, error
+    + FindByHomeID(ctx Context, homeID HomeID) : []Device, error
+    + Save(ctx Context, device Device) : Device, error
+    + Update(ctx Context, device Device) : Device, error
+    + Delete(ctx Context, id DeviceID) : error
+    + UpdateState(ctx Context, id DeviceID, state DeviceState) : error
+}
+
+' ─── PostgreSQL Implementation ───
+class PostgresDeviceRepository {
+    - pool : *pgxpool.Pool
+    + FindByID(ctx Context, id DeviceID) : Device, error
+    + FindByHomeID(ctx Context, homeID HomeID) : []Device, error
+    + Save(ctx Context, device Device) : Device, error
+    + Update(ctx Context, device Device) : Device, error
+    + Delete(ctx Context, id DeviceID) : error
+    + UpdateState(ctx Context, id DeviceID, state DeviceState) : error
+}
+
+' ─── Mock Implementation for Tests ───
+' Does not access the real DB — allows testing services in isolation.
+class InMemoryDeviceRepository {
+    - storage : map[DeviceID]Device
+    + FindByID(ctx Context, id DeviceID) : Device, error
+    + FindByHomeID(ctx Context, homeID HomeID) : []Device, error
+    + Save(ctx Context, device Device) : Device, error
+    + Update(ctx Context, device Device) : Device, error
+    + Delete(ctx Context, id DeviceID) : error
+    + UpdateState(ctx Context, id DeviceID, state DeviceState) : error
+}
+
+' ─── Services depend on the interface, not the implementation ───
+class DeviceRegistrationService {
+    - repo : DeviceRepository
+    - protocolAdapter : ProtocolAdapter
+    + Execute(ctx Context, cmd RegisterDeviceCommand) : Device, error
+}
+
+class DeviceStateService {
+    - repo : DeviceRepository
+    - protocolAdapter : ProtocolAdapter
+    - eventPublisher : EventPublisher
+    + Execute(ctx Context, cmd SendCommandRequest) : error
+}
+
+' ─── Domain Model ───
+class Device {
+    + ID : DeviceID
+    + HomeID : HomeID
+    + RoomID : RoomID
+    + Type : DeviceType
+    + Protocol : Protocol
+    + State : DeviceState
+    + LastSeen : time.Time
+    + CreatedAt : time.Time
+}
+
+enum DeviceType {
+    TEMPERATURE_SENSOR
+    LIGHT_SWITCH
+    SMART_LOCK
+    CAMERA
+    THERMOSTAT
+    RELAY
+}
+
+enum Protocol {
+    MQTT
+    MATTER
+    ZIGBEE
+    HTTP
+}
+
+' ─── Relations ───
+DeviceRepository <|.. PostgresDeviceRepository : implements
+DeviceRepository <|.. InMemoryDeviceRepository : implements
+
+DeviceRegistrationService --> DeviceRepository : uses
+DeviceStateService --> DeviceRepository : uses
+
+DeviceRegistrationService ..> Device : creates
+DeviceStateService ..> Device : updates
+
+Device --> DeviceType
+Device --> Protocol
+
+note right of Device
+  All IDs (DeviceID, HomeID, RoomID) are distinct types,
+  not plain strings or integers.
+  This prevents passing a HomeID where a DeviceID
+  is expected — caught at compile time, not at runtime.
+end note
+
+note right of DeviceRepository
+  Interface — the key abstraction.
+  Services depend only on it.
+  The concrete implementation (Postgres, Mock)
+  is injected via a DI container.
+  This eliminates the main monolith problem:
+  SQL was everywhere; replacing the DB = refactoring everything.
+end note
+
+note bottom of InMemoryDeviceRepository
+  Used in unit tests.
+  Allows testing business logic
+  without running PostgreSQL.
+end note
+
+@enduml
