@@ -1,0 +1,52 @@
+@startuml C4_Components_DeviceService
+' Level 3 — Components: Device Management Service
+' Zoom into a single container. Show logical components:
+' controllers, service layer, adapters, repositories.
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Component Diagram — Device Management Service
+
+' ─── External elements ───
+Container(apiGateway, "API Gateway", "Go", "Routes requests")
+ContainerDb(deviceDb, "Device DB", "PostgreSQL", "Devices, states, bindings")
+Container(messageBroker, "Message Broker", "Kafka", "")
+System_Ext(devices, "Smart Home Devices", "Partners' physical devices")
+
+' ─── Device Management Service components ───
+Container_Boundary(deviceService, "Device Management Service") {
+
+    Component(deviceController, "Device Controller", "Go / gRPC handler", "Accepts incoming requests from API Gateway.\nValidates input data.\nRoutes to the appropriate service.")
+
+    Component(registrationService, "Device Registration Service", "Go", "Logic for registering a new device.\nChecks whether the device type is supported.\nSaves the device to the registry.")
+
+    Component(attachmentService, "Device Attachment Service", "Go", "Logic for binding/unbinding a device\nto a specific home and room.\nVerifies user permissions for the home.")
+
+    Component(stateService, "Device State Service", "Go", "Logic for managing device state:\nturn on/off, send command.\nUpdates the last known state in the DB.")
+
+    Component(protocolAdapter, "Protocol Adapter", "Go", "Abstraction over communication protocols.\nSelects the appropriate protocol (MQTT/HTTP)\nbased on the device type.\nIsolates business logic from transport.")
+
+    Component(eventPublisher, "Event Publisher", "Go / Kafka Producer", "Publishes device state change events\nto the device.events topic.\nAllows other services to react\nto changes asynchronously.")
+
+    Component(deviceRepository, "Device Repository", "Go / PostgreSQL", "Implements data access via an interface.\nCRUD for devices, types, and bindings.\nIsolates business logic from DB details.")
+}
+
+' ─── Relations ───
+Rel(apiGateway, deviceController, "Device management requests", "gRPC")
+
+Rel(deviceController, registrationService, "Register new device")
+Rel(deviceController, attachmentService, "Bind/unbind to home")
+Rel(deviceController, stateService, "Send command to device")
+
+Rel(registrationService, deviceRepository, "Saves device")
+Rel(attachmentService, deviceRepository, "Saves binding")
+Rel(stateService, deviceRepository, "Updates state")
+Rel(stateService, protocolAdapter, "Sends physical command")
+Rel(stateService, eventPublisher, "Notifies about state change")
+
+Rel(protocolAdapter, devices, "Commands to devices", "MQTT / HTTP")
+Rel(eventPublisher, messageBroker, "Publishes device.events", "Kafka")
+Rel(deviceRepository, deviceDb, "SQL queries", "SQL")
+
+@enduml
