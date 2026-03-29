@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package warmhouse.anomaly.v1;
+
+option go_package = "github.com/warmhouse/proto/anomaly/v1;anomalyv1";
+
+// AnomalySeverity — степень критичности аномалии.
+// Значения упорядочены (LOW=1 .. CRITICAL=4), что позволяет consumers
+// фильтровать по severity числовым сравнением.
+enum AnomalySeverity {
+  ANOMALY_SEVERITY_UNSPECIFIED = 0;
+  LOW      = 1;
+  MEDIUM   = 2;
+  HIGH     = 3;
+  CRITICAL = 4;
+}
+
+// AnomalyType — классификация аномалии.
+enum AnomalyType {
+  ANOMALY_TYPE_UNSPECIFIED = 0;
+  // Значение вышло за пределы допустимого диапазона [expected_min, expected_max]
+  THRESHOLD_BREACH = 1;
+  // Резкий скачок значения за короткий промежуток времени
+  SPIKE            = 2;
+  // Устройство перестало отправлять данные (нет heartbeat / измерений)
+  CONNECTION_LOSS  = 3;
+  // Быстрое изменение значения, превышающее допустимую скорость изменения
+  RAPID_CHANGE     = 4;
+}
+
+// AnomalyDetected — событие об обнаруженной аномалии в показаниях датчика.
+// Публикуется Telemetry Service в топик Kafka `anomaly.detected`.
+//
+// Consumers: Notification Service (отправляет алерт пользователю),
+//            Script Service (может триггерить автоматизации).
+// Partition key: device_id.
+// Retention: 30 дней (важно для аудита и расследования инцидентов).
+//
+// Примечание: expected_min/expected_max равные 0.0 означают "граница не задана".
+// Для явного отличия нуля от "не задано" при необходимости следует заменить на
+// google.protobuf.DoubleValue (nullable wrapper).
+message AnomalyDetected {
+  // UUID аномалии (для идемпотентной обработки)
+  string anomaly_id = 1;
+  // UUID устройства, на котором обнаружена аномалия
+  string device_id = 2;
+  // UUID дома, к которому привязано устройство
+  string home_id = 3;
+  // Тип метрики: "temperature", "humidity" и т.д.
+  string metric = 4;
+  // Фактическое значение, вызвавшее аномалию
+  double actual_value = 5;
+  // Нижняя граница нормального диапазона (0.0 = не задана)
+  double expected_min = 6;
+  // Верхняя граница нормального диапазона (0.0 = не задана)
+  double expected_max = 7;
+  // Степень критичности
+  AnomalySeverity severity = 8;
+  // Тип аномалии
+  AnomalyType anomaly_type = 9;
+  // Время обнаружения аномалии (Unix timestamp в миллисекундах)
+  int64 detected_at_ms = 10;
+}

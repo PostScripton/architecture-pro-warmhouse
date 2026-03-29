@@ -1,0 +1,502 @@
+asyncapi: 3.1.0
+info:
+  title: Warm House — Async Messaging API
+  version: 1.0.0
+  description: |
+    Описание Kafka-топиков для асинхронного межсервисного взаимодействия
+    в платформе Warm House.
+
+    **Формат сообщений:** все сообщения сериализованы в бинарный Protobuf
+    (схемы в `schemas/proto/*.proto`). Protobuf выбран за скорость,
+    компактность и строгую типизацию.
+
+    **Паттерн взаимодействия:**
+    - Синхронно (клиент ↔ шлюз): REST API
+    - Синхронно (шлюз ↔ сервисы): gRPC
+    - Асинхронно (сервисы между собой): Kafka + Protobuf (данный документ)
+defaultContentType: application/octet-stream
+servers:
+  production:
+    host: 'kafka.warmhouse.io:9092'
+    protocol: kafka
+    description: Production Kafka cluster (MSK / self-hosted)
+  local:
+    host: 'localhost:9092'
+    protocol: kafka
+    description: Локальная разработка (docker-compose)
+channels:
+  device/events:
+    address: device.events
+    description: |
+      События об изменениях устройств: смена состояния, отправка команды,
+      подключение/отключение, первичная регистрация.
+
+      **Producer:** Device Management Service
+      **Consumers:** Script Service, Notification Service
+      **Partition key:** `device_id` — гарантирует упорядоченность событий
+      по конкретному устройству.
+      **Retention:** 7 дней
+    messages:
+      DeviceEventMessage:
+        $ref: '#/components/messages/DeviceEventMessage'
+    bindings:
+      kafka:
+        partitions: 12
+        replicas: 3
+        topicConfiguration:
+          retention.ms: 604800000
+          cleanup.policy:
+            - delete
+  telemetry/measurements:
+    address: telemetry.measurements
+    description: |
+      Показания датчиков в реальном времени, поступающие с устройств
+      через MQTT-бридж или Device Management Service.
+
+      **Producer:** Device Management Service (MQTT bridge)
+      **Consumer:** Telemetry Service (записывает в TimescaleDB)
+      **Partition key:** `device_id`
+      **Retention:** 2 дня (сырые данные до инжестии в TimescaleDB)
+
+      Это самый высоконагруженный топик системы — одно сообщение
+      на каждое показание каждого датчика.
+    messages:
+      TelemetryMeasurementMessage:
+        $ref: '#/components/messages/TelemetryMeasurementMessage'
+    bindings:
+      kafka:
+        partitions: 24
+        replicas: 3
+        topicConfiguration:
+          retention.ms: 172800000
+          cleanup.policy:
+            - delete
+  anomaly/detected:
+    address: anomaly.detected
+    description: |
+      Аномалии в показаниях датчиков, обнаруженные Telemetry Service:
+      выход за пороговые значения, резкие скачки, потеря связи.
+
+      **Producer:** Telemetry Service (компонент Anomaly Publisher)
+      **Consumers:** Notification Service (алерты пользователю),
+                     Script Service (триггеры автоматизаций)
+      **Partition key:** `device_id`
+      **Retention:** 30 дней (аудит и расследование инцидентов)
+    messages:
+      AnomalyDetectedMessage:
+        $ref: '#/components/messages/AnomalyDetectedMessage'
+    bindings:
+      kafka:
+        partitions: 6
+        replicas: 3
+        topicConfiguration:
+          retention.ms: 2592000000
+          cleanup.policy:
+            - delete
+operations:
+  publishDeviceEvent:
+    action: send
+    channel:
+      $ref: '#/channels/device~1events'
+    summary: Device Management Service публикует событие об изменении устройства
+    description: |
+      Вызывается при: смене состояния, отправке команды, подключении/отключении
+      устройства, регистрации нового устройства.
+    messages:
+      - $ref: '#/channels/device~1events/messages/DeviceEventMessage'
+    bindings:
+      kafka:
+        groupId:
+          type: string
+          const: device-management-producer
+  consumeDeviceEventByScript:
+    action: receive
+    channel:
+      $ref: '#/channels/device~1events'
+    summary: Script Service получает события для запуска триггерных автоматизаций
+    messages:
+      - $ref: '#/channels/device~1events/messages/DeviceEventMessage'
+    bindings:
+      kafka:
+        groupId:
+          type: string
+          const: script-service-consumer
+  consumeDeviceEventByNotification:
+    action: receive
+    channel:
+      $ref: '#/channels/device~1events'
+    summary: Notification Service получает события для информирования пользователей
+    messages:
+      - $ref: '#/channels/device~1events/messages/DeviceEventMessage'
+    bindings:
+      kafka:
+        groupId:
+          type: string
+          const: notification-service-consumer
+  publishTelemetryMeasurement:
+    action: send
+    channel:
+      $ref: '#/channels/telemetry~1measurements'
+    summary: Device Management Service публикует показание датчика
+    messages:
+      - $ref: >-
+          #/channels/telemetry~1measurements/messages/TelemetryMeasurementMessage
+    bindings:
+      kafka:
+        groupId:
+          type: string
+          const: device-management-telemetry-producer
+  consumeTelemetryMeasurement:
+    action: receive
+    channel:
+      $ref: '#/channels/telemetry~1measurements'
+    summary: Telemetry Service получает показания и записывает в TimescaleDB
+    messages:
+      - $ref: >-
+          #/channels/telemetry~1measurements/messages/TelemetryMeasurementMessage
+    bindings:
+      kafka:
+        groupId:
+          type: string
+          const: telemetry-service-consumer
+  publishAnomalyDetected:
+    action: send
+    channel:
+      $ref: '#/channels/anomaly~1detected'
+    summary: Telemetry Service публикует обнаруженную аномалию
+    messages:
+      - $ref: '#/channels/anomaly~1detected/messages/AnomalyDetectedMessage'
+    bindings:
+      kafka:
+        groupId:
+          type: string
+          const: telemetry-anomaly-producer
+  consumeAnomalyDetectedByNotification:
+    action: receive
+    channel:
+      $ref: '#/channels/anomaly~1detected'
+    summary: Notification Service получает аномалии и отправляет алерты
+    messages:
+      - $ref: '#/channels/anomaly~1detected/messages/AnomalyDetectedMessage'
+    bindings:
+      kafka:
+        groupId:
+          type: string
+          const: notification-anomaly-consumer
+  consumeAnomalyDetectedByScript:
+    action: receive
+    channel:
+      $ref: '#/channels/anomaly~1detected'
+    summary: Script Service получает аномалии для триггерных сценариев
+    messages:
+      - $ref: '#/channels/anomaly~1detected/messages/AnomalyDetectedMessage'
+    bindings:
+      kafka:
+        groupId:
+          type: string
+          const: script-anomaly-consumer
+components:
+  messages:
+    DeviceEventMessage:
+      name: DeviceEvent
+      title: Событие устройства
+      summary: 'Изменение состояния, команда, подключение или регистрация устройства'
+      contentType: application/octet-stream
+      payload:
+        $ref: '#/components/schemas/DeviceEventPayload'
+      examples:
+        - name: StateChanged
+          summary: Термостат изменил целевую температуру
+          payload:
+            event_id: a1b2c3d4-0001-0000-0000-000000000001
+            device_id: 550e8400-e29b-41d4-a716-446655440000
+            home_id: 660e8400-e29b-41d4-a716-446655440000
+            event_type: STATE_CHANGED
+            previous_state:
+              status: online
+              payload:
+                target_temperature: 22
+            current_state:
+              status: online
+              payload:
+                target_temperature: 24
+            occurred_at: '2026-03-29T10:05:01Z'
+            correlation_id: cmd-uuid-0000-0000-000000000001
+        - name: DeviceOffline
+          summary: Устройство потеряло связь с платформой
+          payload:
+            event_id: a1b2c3d4-0001-0000-0000-000000000002
+            device_id: 550e8400-e29b-41d4-a716-446655440000
+            home_id: 660e8400-e29b-41d4-a716-446655440000
+            event_type: DEVICE_OFFLINE
+            previous_state:
+              status: online
+              payload: {}
+            current_state:
+              status: offline
+              payload: {}
+            occurred_at: '2026-03-29T11:00:00Z'
+            correlation_id: ''
+    TelemetryMeasurementMessage:
+      name: TelemetryMeasurement
+      title: Показание датчика
+      summary: 'Одно измерение с устройства (температура, влажность, мощность и т.д.)'
+      contentType: application/octet-stream
+      payload:
+        $ref: '#/components/schemas/TelemetryMeasurementPayload'
+      examples:
+        - name: TemperatureReading
+          summary: Показание термостата — температура воздуха
+          payload:
+            device_id: 550e8400-e29b-41d4-a716-446655440000
+            metric: temperature
+            value: 22.5
+            unit: °C
+            quality: GOOD
+            recorded_at_ms: 1743246001000
+        - name: HumidityReading
+          summary: Показание датчика влажности
+          payload:
+            device_id: 770e8400-e29b-41d4-a716-446655440000
+            metric: humidity
+            value: 65
+            unit: '%'
+            quality: GOOD
+            recorded_at_ms: 1743246005000
+    AnomalyDetectedMessage:
+      name: AnomalyDetected
+      title: Обнаруженная аномалия
+      summary: 'Аномальное поведение датчика — выход за диапазон, скачок, обрыв связи'
+      contentType: application/octet-stream
+      payload:
+        $ref: '#/components/schemas/AnomalyDetectedPayload'
+      examples:
+        - name: TemperatureThresholdBreach
+          summary: Температура превысила допустимый максимум (пожарная сигнализация)
+          payload:
+            anomaly_id: b2c3d4e5-0001-0000-0000-000000000001
+            device_id: 550e8400-e29b-41d4-a716-446655440000
+            home_id: 660e8400-e29b-41d4-a716-446655440000
+            metric: temperature
+            actual_value: 45.3
+            expected_min: 15
+            expected_max: 35
+            severity: HIGH
+            anomaly_type: THRESHOLD_BREACH
+            detected_at_ms: 1743246100000
+        - name: ConnectionLoss
+          summary: Устройство перестало отправлять данные
+          payload:
+            anomaly_id: b2c3d4e5-0001-0000-0000-000000000002
+            device_id: 880e8400-e29b-41d4-a716-446655440000
+            home_id: 660e8400-e29b-41d4-a716-446655440000
+            metric: temperature
+            actual_value: 0
+            expected_min: 0
+            expected_max: 0
+            severity: MEDIUM
+            anomaly_type: CONNECTION_LOSS
+            detected_at_ms: 1743246200000
+  schemas:
+    DeviceEventPayload:
+      type: object
+      description: >
+        Структура сообщения DeviceEvent (Protobuf:
+        warmhouse.events.v1.DeviceEvent).
+
+        На проводе передаётся в бинарном Protobuf, здесь описана для читаемости.
+      required:
+        - event_id
+        - device_id
+        - home_id
+        - event_type
+        - current_state
+        - occurred_at
+      properties:
+        event_id:
+          type: string
+          format: uuid
+          description: UUID события для идемпотентной обработки на стороне consumers
+          example: a1b2c3d4-0001-0000-0000-000000000001
+        device_id:
+          type: string
+          format: uuid
+          description: UUID устройства
+          example: 550e8400-e29b-41d4-a716-446655440000
+        home_id:
+          type: string
+          format: uuid
+          description: 'UUID дома, к которому привязано устройство'
+          example: 660e8400-e29b-41d4-a716-446655440000
+        event_type:
+          type: string
+          enum:
+            - STATE_CHANGED
+            - COMMAND_SENT
+            - DEVICE_ONLINE
+            - DEVICE_OFFLINE
+            - DEVICE_REGISTERED
+          description: Тип произошедшего события
+          example: STATE_CHANGED
+        previous_state:
+          $ref: '#/components/schemas/DeviceState'
+          description: Состояние устройства ДО события (пусто для DEVICE_REGISTERED)
+        current_state:
+          $ref: '#/components/schemas/DeviceState'
+          description: Состояние устройства ПОСЛЕ события
+        occurred_at:
+          type: string
+          format: date-time
+          description: 'Время возникновения события (UTC, ISO-8601)'
+          example: '2026-03-29T10:05:01Z'
+        correlation_id:
+          type: string
+          format: uuid
+          description: 'UUID REST-команды, вызвавшей событие (только для COMMAND_SENT)'
+          example: cmd-uuid-0000-0000-000000000001
+    DeviceState:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - online
+            - offline
+            - error
+          description: Статус соединения устройства с платформой
+          example: online
+        payload:
+          type: object
+          additionalProperties: true
+          description: |
+            Произвольные поля состояния, специфичные для типа устройства.
+            Примеры: термостат — {temperature, target_temperature},
+            замок — {locked, last_locked_by},
+            реле — {power_on, power_consumption_w}.
+    TelemetryMeasurementPayload:
+      type: object
+      description: |
+        Структура сообщения TelemetryMeasurement
+        (Protobuf: warmhouse.telemetry.v1.TelemetryMeasurement).
+      required:
+        - device_id
+        - metric
+        - value
+        - unit
+        - quality
+        - recorded_at_ms
+      properties:
+        device_id:
+          type: string
+          format: uuid
+          description: UUID устройства-источника
+          example: 550e8400-e29b-41d4-a716-446655440000
+        metric:
+          type: string
+          description: |
+            Тип метрики. Свободная строка (не enum), чтобы поддерживать
+            новые типы датчиков без изменения схемы.
+          example: temperature
+        value:
+          type: number
+          format: double
+          description: Числовое значение показания
+          example: 22.5
+        unit:
+          type: string
+          description: Единица измерения
+          example: °C
+        quality:
+          type: string
+          enum:
+            - GOOD
+            - UNCERTAIN
+            - BAD
+          description: Качество сигнала датчика
+          example: GOOD
+        recorded_at_ms:
+          type: integer
+          format: int64
+          description: |
+            Время снятия показания (Unix timestamp в миллисекундах).
+            int64 вместо Timestamp — экономия ~4 байт на сообщение
+            в самом высоконагруженном топике системы.
+          example: 1743246001000
+    AnomalyDetectedPayload:
+      type: object
+      description: |
+        Структура сообщения AnomalyDetected
+        (Protobuf: warmhouse.anomaly.v1.AnomalyDetected).
+      required:
+        - anomaly_id
+        - device_id
+        - home_id
+        - metric
+        - actual_value
+        - severity
+        - anomaly_type
+        - detected_at_ms
+      properties:
+        anomaly_id:
+          type: string
+          format: uuid
+          description: UUID аномалии для идемпотентной обработки
+          example: b2c3d4e5-0001-0000-0000-000000000001
+        device_id:
+          type: string
+          format: uuid
+          description: 'UUID устройства, на котором обнаружена аномалия'
+          example: 550e8400-e29b-41d4-a716-446655440000
+        home_id:
+          type: string
+          format: uuid
+          description: UUID дома для маршрутизации уведомлений
+          example: 660e8400-e29b-41d4-a716-446655440000
+        metric:
+          type: string
+          description: 'Тип метрики, в которой обнаружена аномалия'
+          example: temperature
+        actual_value:
+          type: number
+          format: double
+          description: 'Фактическое значение, вызвавшее аномалию'
+          example: 45.3
+        expected_min:
+          type: number
+          format: double
+          description: Нижняя граница нормы (0.0 = не задана)
+          example: 15
+        expected_max:
+          type: number
+          format: double
+          description: Верхняя граница нормы (0.0 = не задана)
+          example: 35
+        severity:
+          type: string
+          enum:
+            - LOW
+            - MEDIUM
+            - HIGH
+            - CRITICAL
+          description: >
+            Степень критичности. Значения упорядочены (LOW < MEDIUM < HIGH <
+            CRITICAL),
+
+            что позволяет фильтровать числовым сравнением в consumers.
+          example: HIGH
+        anomaly_type:
+          type: string
+          enum:
+            - THRESHOLD_BREACH
+            - SPIKE
+            - CONNECTION_LOSS
+            - RAPID_CHANGE
+          description: Классификация аномалии
+          example: THRESHOLD_BREACH
+        detected_at_ms:
+          type: integer
+          format: int64
+          description: Время обнаружения аномалии (Unix timestamp в миллисекундах)
+          example: 1743246100000

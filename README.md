@@ -282,13 +282,47 @@
 
 # Задание 4. Создание и документирование API
 
-### 1. Тип API
+### 1. Типы API
 
-Укажите, какой тип API вы будете использовать для взаимодействия микросервисов. Объясните своё решение.
+В архитектуре используются три типа взаимодействия:
+
+| Слой | Протокол | Обоснование |
+|------|----------|-------------|
+| Клиент (web/mobile) ↔ API Gateway | **REST / HTTPS + JSON** | Стандарт для публичных API, широкая поддержка в браузерах и мобильных фреймворках |
+| API Gateway ↔ Микросервисы | **gRPC** | Строгая типизация через `.proto`, бинарный формат (Protobuf), низкая задержка для синхронных вызовов внутри кластера |
+| Микросервисы ↔ Микросервисы (async) | **Kafka + Protobuf** | Decoupling сервисов, гарантированная доставка, высокая пропускная способность; Protobuf выбран вместо JSON за компактность и типизацию |
 
 ### 2. Документация API
 
-Здесь приложите ссылки на документацию API для микросервисов, которые вы спроектировали в первой части проектной работы. Для документирования используйте Swagger/OpenAPI или AsyncAPI.
+Документация находится в директории [`docs/`](docs/):
+
+**REST API — [`docs/openapi.yaml`](docs/openapi.yaml)** (OpenAPI 3.0.3)
+
+Ссылка на [Swagger Editor](https://editor.swagger.io/) (необходимо скопировать туда документацию, сайт не предоставляет возможности делиться наработками)
+
+Описывает 5 эндпоинтов для клиентского взаимодействия:
+
+| Метод | Путь | Сервис | Описание |
+|-------|------|--------|----------|
+| `POST` | `/api/v1/devices` | Device Management | Регистрация устройства |
+| `GET` | `/api/v1/devices/{deviceId}` | Device Management | Данные устройства (тип, состояние, привязка) |
+| `POST` | `/api/v1/devices/{deviceId}/commands` | Device Management | Отправка команды (`202 Accepted` — MQTT async) |
+| `GET` | `/api/v1/telemetry/{deviceId}/measurements` | Telemetry | История показаний с агрегацией |
+| `GET` | `/api/v1/telemetry/{deviceId}/anomalies` | Telemetry | Аномалии устройства с фильтрами по severity и статусу |
+
+**Async API — [`docs/asyncapi.yaml`](docs/asyncapi.yaml)** (AsyncAPI 3.1.0)
+
+Ссылка на [AsyncAPI Studio](https://studio.asyncapi.com/?share=930107f3-07ab-421f-aff0-c348533b060c)
+
+Описывает 3 Kafka-топика:
+
+| Топик | Producer | Consumers | Retention |
+|-------|----------|-----------|-----------|
+| `device.events` | Device Management | Script, Notification | 7 дней |
+| `telemetry.measurements` | Device Management (MQTT bridge) | Telemetry | 2 дня |
+| `anomaly.detected` | Telemetry | Notification, Script | 30 дней |
+
+Protobuf-схемы сообщений: [`apps/proto/`](apps/proto/)
 
 # Задание 5. Работа с docker и docker-compose
 
