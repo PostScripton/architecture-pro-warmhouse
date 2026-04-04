@@ -23,6 +23,26 @@ services:
     networks:
       - smarthome-network
 
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: smarthome-timescaledb
+    ports:
+      - "10001:5432"
+    environment:
+      POSTGRES_USER: homestead
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: telemetry
+    volumes:
+      - ./telemetry_service/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - telemetry_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U homestead -d telemetry"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - smarthome-network
+
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.0
     container_name: smarthome-zookeeper
@@ -71,6 +91,8 @@ services:
     command:
       - |
         kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic device.events --partitions 12 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic telemetry.measurements --partitions 24 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic anomaly.detected --partitions 6 --replication-factor 1
     networks:
       - smarthome-network
 
@@ -101,6 +123,30 @@ services:
       GRPC_PORT: "50051"
     depends_on:
       postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 50051 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - smarthome-network
+
+  telemetry-service:
+    build:
+      context: ./telemetry_service
+      dockerfile: Dockerfile
+    container_name: smarthome-telemetry-service
+    ports:
+      - "8083:50051"
+    environment:
+      DATABASE_URL: postgres://homestead:secret@timescaledb:5432/telemetry
+      KAFKA_BROKERS: kafka:29092
+      GRPC_PORT: "50051"
+    depends_on:
+      timescaledb:
         condition: service_healthy
       kafka:
         condition: service_healthy
@@ -144,6 +190,7 @@ services:
 
 volumes:
   postgres_data:
+  telemetry_data:
 
 networks:
   smarthome-network:

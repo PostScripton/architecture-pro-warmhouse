@@ -23,7 +23,7 @@ type TemperatureResponse struct {
 }
 
 func randomTemperature() float64 {
-	return 15.0 + rand.Float64()*20.0
+	return 15.0 + rand.Float64()*27.0
 }
 
 func locationToSensorID(location string) string {
