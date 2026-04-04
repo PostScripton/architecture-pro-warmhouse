@@ -1,3 +1,9 @@
+-- Create the database if it doesn't exist
+CREATE DATABASE device_service;
+
+-- Connect to the database
+\c device_service;
+
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE TABLE device_types (

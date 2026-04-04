@@ -8,15 +8,16 @@ services:
     ports:
       - "10000:5432"
     environment:
-      POSTGRES_DB: smarthome
+      POSTGRES_DB: postgres
       POSTGRES_USER: homestead
       POSTGRES_PASSWORD: secret
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./smart_home/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./smarthome/init.sql:/docker-entrypoint-initdb.d/01-smarthome.sql
+      - ./device_service/init.sql:/docker-entrypoint-initdb.d/02-device-service.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U homestead -d smarthome"]
+      test: ["CMD-SHELL", "pg_isready -U homestead -d postgres"]
       interval: 5s
       timeout: 5s
       retries: 5
