@@ -5,7 +5,7 @@ set -e
 
 echo "Starting the Smart Home Sensor API..."
 echo "Building and starting containers..."
-docker-compose up --build -d
+docker compose up --build -d
 
 echo "Waiting for services to be ready..."
 # Wait for PostgreSQL to be ready
@@ -27,5 +27,5 @@ fi
 echo "All services are up and running!"
 echo "The API is available at http://localhost:8080"
 echo ""
-echo "To view logs, run: docker-compose logs -f"
+echo "To view logs, run: docker compose logs -f"
 echo "To stop the services, run: docker-compose down"
