@@ -150,7 +150,7 @@
 
 [C4 Контекстная диаграмма новой системы в папке со схемами](schemas/c4_context.puml)
 
-<img src="schemas/c4_context_diagram.png" alt="C4 контекстная диаграмма" width="50%">
+<img src="schemas/c4_context.png" alt="C4 контекстная диаграмма" width="50%">
 
 # Задание 2. Проектирование микросервисной архитектуры
 
@@ -169,7 +169,7 @@
 
 [C4 Контейнерная диаграмма новой системы в папке со схемами](schemas/c4_containers.puml)
 
-<img src="schemas/c4_containers_diagram.png" alt="C4 контейнерная диаграмма" width="100%">
+<img src="schemas/c4_containers.png" alt="C4 контейнерная диаграмма" width="100%">
 
 ## Диаграмма компонентов (Components)
 
@@ -181,7 +181,7 @@
 
 [C4 Контейнерная диаграмма Device Management Service в папке со схемами](schemas/c4_components_device_service.puml)
 
-<img src="schemas/c4_components_device_service_diagram.png" alt="C4 компонентная диаграмма Device Management Service" width="50%">
+<img src="schemas/c4_components_device_service.png" alt="C4 компонентная диаграмма Device Management Service" width="50%">
 
 *Telemetry Service* — отвечает за приём телеметрии от устройств через Kafka, хранение показаний в TimescaleDB и детектирование аномалий.
 
@@ -189,7 +189,7 @@
 
 [C4 Контейнерная диаграмма Telemetry Service в папке со схемами](schemas/c4_components_telemetry_service.puml)
 
-<img src="schemas/c4_components_telemetry_service_diagram.png" alt="C4 компонентная диаграмма Telemetry Service" width="50%">
+<img src="schemas/c4_components_telemetry_service.png" alt="C4 компонентная диаграмма Telemetry Service" width="50%">
 
 ## Диаграмма кода (Code)
 
@@ -199,7 +199,7 @@
 
 [C4 Кодовая диаграмма в папке со схемами](schemas/c4_code_device_management_service.puml)
 
-<img src="schemas/c4_code_device_management_service_diagram.png" alt="С4 кодовая диаграмма Device Management System" width="100%">
+<img src="schemas/c4_code_device_management_service.png" alt="С4 кодовая диаграмма Device Management System" width="100%">
 
 # Задание 3. Разработка ER-диаграммы
 
