@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package warmhouse.telemetry.v1;
+
+option go_package = "github.com/warmhouse/proto/telemetry/v1;telemetryv1";
+
+// MeasurementQuality отражает достоверность показания датчика.
+enum MeasurementQuality {
+  MEASUREMENT_QUALITY_UNSPECIFIED = 0;
+  // Сигнал стабильный, данные достоверны
+  GOOD      = 1;
+  // Нестабильный сигнал, данные условно достоверны
+  UNCERTAIN = 2;
+  // Потеря связи или аппаратная ошибка, данные недостоверны
+  BAD       = 3;
+}
+
+// TelemetryMeasurement — одно показание датчика.
+// Публикуется в топик Kafka `telemetry.measurements` MQTT-бриджем
+// или Device Management Service при получении данных от устройства.
+//
+// Consumer: Telemetry Service (записывает в TimescaleDB).
+// Partition key: device_id.
+//
+// Примечание по времени: используется int64 (Unix millis), а не
+// google.protobuf.Timestamp, потому что это самый высоконагруженный
+// топик системы (одно сообщение на каждое показание датчика).
+// int64 экономит ~4 байта на сообщение и убирает overhead вложенного message.
+message TelemetryMeasurement {
+  // UUID устройства-источника
+  string device_id = 1;
+  // Тип метрики: "temperature", "humidity", "motion", "power_consumption" и т.д.
+  // Намеренно оставлен строкой (не enum), чтобы поддерживать новые типы датчиков
+  // (например, устройства Matter) без изменения схемы.
+  string metric = 2;
+  // Числовое значение показания
+  double value = 3;
+  // Единица измерения: "°C", "%", "W", "lx" и т.д.
+  string unit = 4;
+  // Качество сигнала датчика
+  MeasurementQuality quality = 5;
+  // Время снятия показания (Unix timestamp в миллисекундах)
+  int64 recorded_at_ms = 6;
+}

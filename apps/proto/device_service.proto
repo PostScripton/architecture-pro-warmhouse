@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package warmhouse.device.v1;
+
+option go_package = "gen/devicepb";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// DeviceService — gRPC API для управления устройствами.
+// Реализуется Device Management Service.
+// Consumers: API Gateway, Monolith (на этапе миграции).
+service DeviceService {
+  // Регистрация нового устройства в платформе.
+  rpc RegisterDevice(RegisterDeviceRequest) returns (RegisterDeviceResponse);
+  // Получение полной информации об устройстве.
+  rpc GetDevice(GetDeviceRequest) returns (GetDeviceResponse);
+  // Отправка команды на устройство (асинхронное выполнение).
+  rpc SendCommand(SendCommandRequest) returns (SendCommandResponse);
+}
+
+message RegisterDeviceRequest {
+  string name = 1;
+  string serial_number = 2;
+  string type_id = 3;        // UUID типа устройства
+  string protocol = 4;       // MQTT, MATTER, ZIGBEE, HTTP
+}
+
+message RegisterDeviceResponse {
+  string id = 1;
+  string name = 2;
+  string serial_number = 3;
+  string type_id = 4;
+  string protocol = 5;
+  string status = 6;
+  google.protobuf.Timestamp registered_at = 7;
+}
+
+message GetDeviceRequest {
+  string device_id = 1;
+}
+
+message GetDeviceResponse {
+  string id = 1;
+  string name = 2;
+  string serial_number = 3;
+  string protocol = 4;
+  string status = 5;
+  google.protobuf.Struct state_payload = 6;
+  google.protobuf.Timestamp state_updated_at = 7;
+  google.protobuf.Timestamp registered_at = 8;
+}
+
+message SendCommandRequest {
+  string device_id = 1;
+  string command = 2;                   // TURN_ON, TURN_OFF, SET_TEMPERATURE, LOCK, UNLOCK, OPEN, CLOSE
+  google.protobuf.Struct payload = 3;   // Дополнительные параметры команды
+}
+
+message SendCommandResponse {
+  string command_id = 1;
+  string device_id = 2;
+  string command = 3;
+  string status = 4;                    // "accepted"
+  google.protobuf.Timestamp accepted_at = 5;
+}

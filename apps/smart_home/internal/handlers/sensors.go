@@ -2,29 +2,46 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
-	"smarthome/db"
-	"smarthome/models"
-	"smarthome/services"
+	"smarthome/internal/models"
+	"smarthome/internal/repository"
+	"smarthome/internal/services"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
-// SensorHandler handles sensor-related requests
+// SensorHandler handles sensor-related requests.
 type SensorHandler struct {
-	DB                 *db.DB
+	Repo               repository.SensorRepository
 	TemperatureService *services.TemperatureService
+	// DeviceClient is optional. When non-nil, newly created sensors are
+	// registered with the Device Management Service.
+	DeviceClient *services.DeviceClient
+	// TelemetryProducer is optional. When non-nil, sensor value updates are
+	// published to Kafka as telemetry measurements.
+	TelemetryProducer *services.TelemetryProducer
 }
 
-// NewSensorHandler creates a new SensorHandler
-func NewSensorHandler(db *db.DB, temperatureService *services.TemperatureService) *SensorHandler {
+// NewSensorHandler creates a new SensorHandler. deviceClient and
+// telemetryProducer may be nil; the handler degrades gracefully in that case.
+func NewSensorHandler(
+	repo repository.SensorRepository,
+	temperatureService *services.TemperatureService,
+	deviceClient *services.DeviceClient,
+	telemetryProducer *services.TelemetryProducer,
+) *SensorHandler {
 	return &SensorHandler{
-		DB:                 db,
+		Repo:               repo,
 		TemperatureService: temperatureService,
+		DeviceClient:       deviceClient,
+		TelemetryProducer:  telemetryProducer,
 	}
 }
 
@@ -44,7 +61,7 @@ func (h *SensorHandler) RegisterRoutes(router *gin.RouterGroup) {
 
 // GetSensors handles GET /api/v1/sensors
 func (h *SensorHandler) GetSensors(c *gin.Context) {
-	sensors, err := h.DB.GetSensors(context.Background())
+	sensors, err := h.Repo.GetAll(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -77,7 +94,7 @@ func (h *SensorHandler) GetSensorByID(c *gin.Context) {
 		return
 	}
 
-	sensor, err := h.DB.GetSensorByID(context.Background(), id)
+	sensor, err := h.Repo.GetByID(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Sensor not found"})
 		return
@@ -136,10 +153,33 @@ func (h *SensorHandler) CreateSensor(c *gin.Context) {
 		return
 	}
 
-	sensor, err := h.DB.CreateSensor(context.Background(), sensorCreate)
+	sensor, err := h.Repo.Create(c.Request.Context(), sensorCreate)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Fire-and-forget: register the new sensor as a device. Failures here do
+	// not affect the response — the monolith continues to work without the
+	// Device Management Service.
+	if h.DeviceClient != nil {
+		go func() {
+			ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
+			defer cancel()
+			serialNumber := fmt.Sprintf("sensor-%d", sensor.ID)
+			resp, err := h.DeviceClient.RegisterDevice(
+				ctx,
+				sensor.Name,
+				serialNumber,
+				"a1b2c3d4-0000-0000-0000-000000000001", // default thermostat type
+				"HTTP",
+			)
+			if err != nil {
+				log.Printf("device registration failed for sensor %d: %v", sensor.ID, err)
+				return
+			}
+			log.Printf("sensor %d registered as device %s", sensor.ID, resp.GetId())
+		}()
 	}
 
 	c.JSON(http.StatusCreated, sensor)
@@ -159,7 +199,7 @@ func (h *SensorHandler) UpdateSensor(c *gin.Context) {
 		return
 	}
 
-	sensor, err := h.DB.UpdateSensor(context.Background(), id, sensorUpdate)
+	sensor, err := h.Repo.Update(c.Request.Context(), id, sensorUpdate)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -176,8 +216,12 @@ func (h *SensorHandler) DeleteSensor(c *gin.Context) {
 		return
 	}
 
-	err = h.DB.DeleteSensor(context.Background(), id)
+	err = h.Repo.Delete(c.Request.Context(), id)
 	if err != nil {
+		if errors.Is(err, repository.ErrSensorNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Sensor not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -194,8 +238,8 @@ func (h *SensorHandler) UpdateSensorValue(c *gin.Context) {
 	}
 
 	var request struct {
-		Value  float64 `json:"value" binding:"required"`
-		Status string  `json:"status" binding:"required"`
+		Value  *float64 `json:"value" binding:"required"`
+		Status string   `json:"status" binding:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&request); err != nil {
@@ -203,11 +247,38 @@ func (h *SensorHandler) UpdateSensorValue(c *gin.Context) {
 		return
 	}
 
-	err = h.DB.UpdateSensorValue(context.Background(), id, request.Value, request.Status)
+	sensor, err := h.Repo.GetByID(c.Request.Context(), id)
 	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Sensor not found"})
+		return
+	}
+
+	if err := h.Repo.UpdateValue(c.Request.Context(), id, *request.Value, request.Status); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
+	// Fire-and-forget: publish the new reading to Kafka. Failures here do not
+	// affect the response — the monolith continues to work without Kafka.
+	if h.TelemetryProducer != nil {
+		go func() {
+			// Derive a deterministic UUID from the sensor's integer ID so that
+			// the telemetry service can parse it as a valid UUID. Both sides must
+			// use the same derivation — see sensorDeviceID.
+			deviceID := sensorDeviceID(sensor.ID)
+			if err := h.TelemetryProducer.PublishMeasurement(deviceID, string(sensor.Type), *request.Value, sensor.Unit); err != nil {
+				log.Printf("failed to publish telemetry for sensor %d: %v", sensor.ID, err)
+			}
+		}()
+	}
+
 	c.JSON(http.StatusOK, gin.H{"message": "Sensor value updated successfully"})
+}
+
+// sensorDeviceID returns a deterministic UUID for a sensor identified by its
+// integer ID. Using uuid.NewSHA1 ensures that both the monolith (publisher)
+// and any consumer (e.g. telemetry service) derive the same UUID from the same
+// integer without requiring a round-trip to the Device Management Service.
+func sensorDeviceID(sensorID int) string {
+	return uuid.NewSHA1(uuid.NameSpaceDNS, []byte(fmt.Sprintf("sensor-%d", sensorID))).String()
 }

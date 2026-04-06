@@ -1,0 +1,50 @@
+@startuml C4_Components_TelemetryService
+' Level 3 — Components: Telemetry Service
+' The second key service — responsible for receiving, storing, and analyzing device telemetry.
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Component Diagram — Telemetry Service
+
+' ─── External elements ───
+Container(apiGateway, "API Gateway", "Go", "Routes requests")
+ContainerDb(telemetryDb, "Telemetry DB", "TimescaleDB", "Time-series sensor readings")
+Container(messageBroker, "Message Broker", "Kafka", "")
+System_Ext(devices, "Smart Home Devices", "Sensors sending telemetry")
+
+' ─── Telemetry Service components ───
+Container_Boundary(telemetryService, "Telemetry Service") {
+
+    Component(telemetryController, "Telemetry Controller", "Go / gRPC handler", "Accepts REST/gRPC requests for historical telemetry data.\nResponds to requests from API Gateway.")
+
+    Component(measurementConsumer, "Measurement Consumer", "Go / Kafka Consumer", "Subscribes to the device.events topic.\nReceives new readings from devices.\nForwards data for processing.")
+
+    Component(measurementService, "Measurement Service", "Go", "Business logic for processing new readings.\nValidates data.\nSaves to DB.\nForwards to anomaly detector.")
+
+    Component(queryService, "Query Service", "Go", "Logic for retrieving historical data.\nSupports aggregation by period\n(hour, day, week).\nFiltering by device/room.")
+
+    Component(anomalyDetector, "Anomaly Detector", "Go", "Detects anomalies in readings:\nthreshold breaches,\nsharp spikes, connection loss.\nPublishes an event to Kafka.")
+
+    Component(anomalyPublisher, "Anomaly Publisher", "Go / Kafka Producer", "Publishes anomaly.detected event\nto Kafka when an anomaly is found.\nOther services (Notification, Script)\nreact to this event.")
+
+    Component(telemetryRepository, "Telemetry Repository", "Go / TimescaleDB", "Writes new readings.\nReads historical data with\ntime-series query support.\nAggregation (avg, min, max) over a period.")
+}
+
+' ─── Relations ───
+Rel(devices, measurementConsumer, "Telemetry via device.events", "Kafka")
+Rel(measurementConsumer, measurementService, "Forwards new readings")
+
+Rel(measurementService, telemetryRepository, "Saves reading")
+Rel(measurementService, anomalyDetector, "Checks for anomalies")
+
+Rel(anomalyDetector, anomalyPublisher, "Signals an anomaly")
+Rel(anomalyPublisher, messageBroker, "Publishes anomaly.detected", "Kafka")
+
+Rel(apiGateway, telemetryController, "Historical data request", "gRPC")
+Rel(telemetryController, queryService, "Requests data")
+Rel(queryService, telemetryRepository, "Reads data")
+
+Rel(telemetryRepository, telemetryDb, "SQL / time-series queries", "SQL")
+
+@enduml

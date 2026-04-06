@@ -1,0 +1,31 @@
+@startuml C4_Context
+' Level 1 — System Context
+' Answers: who uses the system and which external systems does it interact with?
+' At this level the entire platform is a single box — internals do not matter.
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Context Diagram — "Warm House" Platform (To-Be)
+
+' ─── System users ───
+Person(user, "User\n(home owner)", "Manages the smart home:\ndevices, scenarios,\ntelemetry and notifications")
+Person(admin, "Platform\nAdministrator", "Manages the platform,\nusers and partner device\nintegrations")
+
+' ─── Our system ───
+System(smartHome, "Warm House Platform", "Smart home SaaS platform.\nAllows users to independently\nconnect devices, configure\nscenarios and view telemetry")
+
+' ─── External systems ───
+System_Ext(devices, "Smart Home Devices", "Physical partner devices:\ntemperature sensors, relays, cameras,\nsmart locks, thermostats, etc.")
+System_Ext(notificationProviders, "Notification Providers", "Notification delivery services:\nFirebase (push), Twilio (SMS),\nSendGrid (email), calls")
+System_Ext(paymentSystem, "Payment System", "Processes payments for SaaS subscription.\nE.g. Stripe or YooKassa")
+
+' ─── Interactions ───
+Rel(user, smartHome, "Manages home, devices\nand scenarios via web/mobile", "HTTPS")
+Rel(admin, smartHome, "Configures the platform\nand manages integrations", "HTTPS")
+
+Rel(smartHome, devices, "Sends commands to devices\nand receives telemetry", "MQTT / Matter / Zigbee / HTTP")
+Rel(smartHome, notificationProviders, "Sends notifications\nto users about anomalies and events", "HTTPS / API")
+Rel(smartHome, paymentSystem, "Processes payments\nfor user subscriptions", "HTTPS / API")
+
+@enduml

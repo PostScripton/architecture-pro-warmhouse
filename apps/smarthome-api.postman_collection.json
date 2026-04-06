@@ -1,221 +1,2437 @@
 {
-    "info": {
-        "_postman_id": "f8e3a123-4567-89ab-cdef-0123456789ab",
-        "name": "Smart Home Sensor API",
-        "description": "A collection for testing the Smart Home Sensor Management API",
-        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-    },
-    "item": [
+  "info": {
+    "_postman_id": "76a4f982-4da1-4f47-828b-ca548dda8654",
+    "name": "Smart Home API",
+    "description": "Collection for testing the Smart Home ecosystem running via docker-compose.\n\nServices:\n- smart_home app (REST): http://localhost:8080\n- temperature-api (REST): http://localhost:8081\n- device-service (gRPC): localhost:8082\n- telemetry-service (gRPC): localhost:8083\n\nQuick start:\n  cd apps && docker-compose up --build\n\nVerification flow:\n1. Run 'Health Check'\n2. Run 'Create Sensor' (happy path)\n3. Run 'Get All Sensors' — see live temperature\n4. Run 'Update Sensor Value' with value=22.5\n5. Run 'Update Sensor Value — Extreme (triggers anomaly)' with value=50\n6. Run fail-path requests to verify error handling\n\nNote: device-service and telemetry-service expose gRPC on ports 8082/8083.\nUse grpcurl for testing them directly:\n  grpcurl -plaintext localhost:8082 list\n  grpcurl -plaintext localhost:8083 list",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "11360493"
+  },
+  "item": [
+    {
+      "name": "Smart Home App (8080)",
+      "item": [
         {
-            "name": "Health Check",
-            "request": {
+          "name": "Happy Path",
+          "item": [
+            {
+              "name": "Health Check",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status code is 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
                 "method": "GET",
                 "header": [],
                 "url": {
-                    "raw": "http://localhost:8080/health",
-                    "protocol": "http",
-                    "host": [
-                        "localhost"
-                    ],
-                    "port": "8080",
-                    "path": [
+                  "raw": "{{appUrl}}/health",
+                  "host": [
+                    "{{appUrl}}"
+                  ],
+                  "path": [
+                    "health"
+                  ]
+                },
+                "description": "Check if the smart_home app is running"
+              },
+              "response": [
+                {
+                  "name": "Health Check",
+                  "originalRequest": {
+                    "method": "GET",
+                    "header": [],
+                    "url": {
+                      "raw": "{{appUrl}}/health",
+                      "host": [
+                        "{{appUrl}}"
+                      ],
+                      "path": [
                         "health"
-                    ]
-                },
-                "description": "Check if the API is running"
+                      ]
+                    }
+                  },
+                  "status": "OK",
+                  "code": 200,
+                  "_postman_previewlanguage": null,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json; charset=utf-8"
+                    },
+                    {
+                      "key": "Date",
+                      "value": "Fri, 03 Apr 2026 23:52:51 GMT"
+                    },
+                    {
+                      "key": "Content-Length",
+                      "value": "15"
+                    }
+                  ],
+                  "cookie": [],
+                  "body": "{\n    \"status\": \"ok\"\n}"
+                }
+              ]
             },
-            "response": []
-        },
-        {
-            "name": "Get All Sensors",
-            "request": {
-                "method": "GET",
-                "header": [],
-                "url": {
-                    "raw": "http://localhost:8080/api/v1/sensors",
-                    "protocol": "http",
-                    "host": [
-                        "localhost"
-                    ],
-                    "port": "8080",
-                    "path": [
-                        "api",
-                        "v1",
-                        "sensors"
+            {
+              "name": "Create Sensor",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status code is 201', function () {",
+                      "    pm.response.to.have.status(201);",
+                      "});",
+                      "",
+                      "pm.test('Response contains sensor ID', function () {",
+                      "    var json = pm.response.json();",
+                      "    pm.expect(json.id).to.be.a('number');",
+                      "    pm.collectionVariables.set('sensorId', json.id);",
+                      "});",
+                      "",
+                      "pm.test('Sensor has correct fields', function () {",
+                      "    var json = pm.response.json();",
+                      "    pm.expect(json.name).to.eql('Living Room Temperature');",
+                      "    pm.expect(json.type).to.eql('temperature');",
+                      "    pm.expect(json.location).to.eql('Living Room');",
+                      "    pm.expect(json.unit).to.eql('Celsius');",
+                      "    pm.expect(json.status).to.eql('inactive');",
+                      "});"
                     ]
-                },
-                "description": "Retrieve all sensors"
-            },
-            "response": []
-        },
-        {
-            "name": "Get Sensor by ID",
-            "request": {
-                "method": "GET",
-                "header": [],
-                "url": {
-                    "raw": "http://localhost:8080/api/v1/sensors/1",
-                    "protocol": "http",
-                    "host": [
-                        "localhost"
-                    ],
-                    "port": "8080",
-                    "path": [
-                        "api",
-                        "v1",
-                        "sensors",
-                        "1"
-                    ]
-                },
-                "description": "Retrieve a specific sensor by ID"
-            },
-            "response": []
-        },
-        {
-            "name": "Create Sensor",
-            "request": {
+                  }
+                }
+              ],
+              "request": {
                 "method": "POST",
                 "header": [
-                    {
-                        "key": "Content-Type",
-                        "value": "application/json"
-                    }
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
                 ],
                 "body": {
-                    "mode": "raw",
-                    "raw": "{\n    \"name\": \"Living Room Temperature\",\n    \"type\": \"temperature\",\n    \"location\": \"Living Room\",\n    \"unit\": \"°C\"\n}"
+                  "mode": "raw",
+                  "raw": "{\n    \"name\": \"Living Room Temperature\",\n    \"type\": \"temperature\",\n    \"location\": \"Living Room\",\n    \"unit\": \"Celsius\"\n}"
                 },
                 "url": {
-                    "raw": "http://localhost:8080/api/v1/sensors",
-                    "protocol": "http",
-                    "host": [
-                        "localhost"
+                  "raw": "{{appUrl}}/api/v1/sensors",
+                  "host": [
+                    "{{appUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sensors"
+                  ]
+                },
+                "description": "Create a new temperature sensor. Also fires-and-forgets a gRPC RegisterDevice call to device-service (if available). After creation, call 'Get All Sensors' to see live temperature from temperature-api."
+              },
+              "response": [
+                {
+                  "name": "Create Sensor",
+                  "originalRequest": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
                     ],
-                    "port": "8080",
-                    "path": [
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n    \"name\": \"Living Room Temperature\",\n    \"type\": \"temperature\",\n    \"location\": \"Living Room\",\n    \"unit\": \"Celsius\"\n}"
+                    },
+                    "url": {
+                      "raw": "{{appUrl}}/api/v1/sensors",
+                      "host": [
+                        "{{appUrl}}"
+                      ],
+                      "path": [
                         "api",
                         "v1",
                         "sensors"
-                    ]
-                },
-                "description": "Create a new sensor"
-            },
-            "response": []
-        },
-        {
-            "name": "Update Sensor",
-            "request": {
-                "method": "PUT",
-                "header": [
-                    {
-                        "key": "Content-Type",
-                        "value": "application/json"
+                      ]
                     }
+                  },
+                  "status": "Created",
+                  "code": 201,
+                  "_postman_previewlanguage": null,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json; charset=utf-8"
+                    },
+                    {
+                      "key": "Date",
+                      "value": "Fri, 03 Apr 2026 23:53:10 GMT"
+                    },
+                    {
+                      "key": "Content-Length",
+                      "value": "222"
+                    }
+                  ],
+                  "cookie": [],
+                  "body": "{\n    \"id\": 2,\n    \"name\": \"Living Room Temperature\",\n    \"type\": \"temperature\",\n    \"location\": \"Living Room\",\n    \"value\": 0,\n    \"unit\": \"Celsius\",\n    \"status\": \"inactive\",\n    \"last_updated\": \"2026-04-03T23:53:10.158863Z\",\n    \"created_at\": \"2026-04-03T23:53:10.158863Z\"\n}"
+                }
+              ]
+            },
+            {
+              "name": "Create Sensor — Kitchen",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status code is 201', function () {",
+                      "    pm.response.to.have.status(201);",
+                      "});",
+                      "",
+                      "pm.test('Response contains sensor ID', function () {",
+                      "    var json = pm.response.json();",
+                      "    pm.expect(json.id).to.be.a('number');",
+                      "    pm.collectionVariables.set('sensorId2', json.id);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
                 ],
                 "body": {
-                    "mode": "raw",
-                    "raw": "{\n    \"name\": \"Updated Living Room Temperature\",\n    \"type\": \"temperature\",\n    \"location\": \"Living Room\",\n    \"unit\": \"°C\"\n}"
+                  "mode": "raw",
+                  "raw": "{\n    \"name\": \"Kitchen Temperature\",\n    \"type\": \"temperature\",\n    \"location\": \"Kitchen\",\n    \"unit\": \"Celsius\"\n}"
                 },
                 "url": {
-                    "raw": "http://localhost:8080/api/v1/sensors/1",
-                    "protocol": "http",
-                    "host": [
-                        "localhost"
+                  "raw": "{{appUrl}}/api/v1/sensors",
+                  "host": [
+                    "{{appUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sensors"
+                  ]
+                },
+                "description": "Create a second sensor to verify multiple sensors work"
+              },
+              "response": [
+                {
+                  "name": "Create Sensor — Kitchen",
+                  "originalRequest": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
                     ],
-                    "port": "8080",
-                    "path": [
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n    \"name\": \"Kitchen Temperature\",\n    \"type\": \"temperature\",\n    \"location\": \"Kitchen\",\n    \"unit\": \"Celsius\"\n}"
+                    },
+                    "url": {
+                      "raw": "{{appUrl}}/api/v1/sensors",
+                      "host": [
+                        "{{appUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "v1",
+                        "sensors"
+                      ]
+                    }
+                  },
+                  "status": "Created",
+                  "code": 201,
+                  "_postman_previewlanguage": null,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json; charset=utf-8"
+                    },
+                    {
+                      "key": "Date",
+                      "value": "Fri, 03 Apr 2026 23:53:14 GMT"
+                    },
+                    {
+                      "key": "Content-Length",
+                      "value": "214"
+                    }
+                  ],
+                  "cookie": [],
+                  "body": "{\n    \"id\": 3,\n    \"name\": \"Kitchen Temperature\",\n    \"type\": \"temperature\",\n    \"location\": \"Kitchen\",\n    \"value\": 0,\n    \"unit\": \"Celsius\",\n    \"status\": \"inactive\",\n    \"last_updated\": \"2026-04-03T23:53:14.916205Z\",\n    \"created_at\": \"2026-04-03T23:53:14.916205Z\"\n}"
+                }
+              ]
+            },
+            {
+              "name": "Get All Sensors",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status code is 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('Response is an array', function () {",
+                      "    var json = pm.response.json();",
+                      "    pm.expect(json).to.be.an('array');",
+                      "    pm.expect(json.length).to.be.at.least(1);",
+                      "});",
+                      "",
+                      "pm.test('Each sensor has required fields', function () {",
+                      "    var json = pm.response.json();",
+                      "    json.forEach(function(sensor) {",
+                      "        pm.expect(sensor).to.have.property('id');",
+                      "        pm.expect(sensor).to.have.property('name');",
+                      "        pm.expect(sensor).to.have.property('type');",
+                      "        pm.expect(sensor).to.have.property('location');",
+                      "        pm.expect(sensor).to.have.property('status');",
+                      "    });",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{appUrl}}/api/v1/sensors",
+                  "host": [
+                    "{{appUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sensors"
+                  ]
+                },
+                "description": "Retrieve all sensors with live temperature data from temperature-api. Call multiple times — temperature value changes on each request."
+              },
+              "response": [
+                {
+                  "name": "Get All Sensors",
+                  "originalRequest": {
+                    "method": "GET",
+                    "header": [],
+                    "url": {
+                      "raw": "{{appUrl}}/api/v1/sensors",
+                      "host": [
+                        "{{appUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "v1",
+                        "sensors"
+                      ]
+                    }
+                  },
+                  "status": "OK",
+                  "code": 200,
+                  "_postman_previewlanguage": null,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json; charset=utf-8"
+                    },
+                    {
+                      "key": "Date",
+                      "value": "Fri, 03 Apr 2026 23:53:42 GMT"
+                    },
+                    {
+                      "key": "Content-Length",
+                      "value": "714"
+                    }
+                  ],
+                  "cookie": [],
+                  "body": "[\n    {\n        \"id\": 1,\n        \"name\": \"Living Room Temperature\",\n        \"type\": \"temperature\",\n        \"location\": \"Living Room\",\n        \"value\": 26.171550065060188,\n        \"unit\": \"Celsius\",\n        \"status\": \"active\",\n        \"last_updated\": \"2026-04-03T23:53:42.95426742Z\",\n        \"created_at\": \"2026-04-03T23:53:03.796793Z\"\n    },\n    {\n        \"id\": 2,\n        \"name\": \"Living Room Temperature\",\n        \"type\": \"temperature\",\n        \"location\": \"Living Room\",\n        \"value\": 22.123019245587226,\n        \"unit\": \"Celsius\",\n        \"status\": \"active\",\n        \"last_updated\": \"2026-04-03T23:53:42.955225337Z\",\n        \"created_at\": \"2026-04-03T23:53:10.158863Z\"\n    },\n    {\n        \"id\": 3,\n        \"name\": \"Kitchen Temperature\",\n        \"type\": \"temperature\",\n        \"location\": \"Kitchen\",\n        \"value\": 19.20501679667483,\n        \"unit\": \"Celsius\",\n        \"status\": \"active\",\n        \"last_updated\": \"2026-04-03T23:53:42.955565379Z\",\n        \"created_at\": \"2026-04-03T23:53:14.916205Z\"\n    }\n]"
+                }
+              ]
+            },
+            {
+              "name": "Get Sensor by ID",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status code is 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('Sensor has correct ID', function () {",
+                      "    var json = pm.response.json();",
+                      "    var expectedId = pm.collectionVariables.get('sensorId');",
+                      "    pm.expect(json.id).to.eql(Number(expectedId));",
+                      "});",
+                      "",
+                      "pm.test('Sensor has all required fields', function () {",
+                      "    var json = pm.response.json();",
+                      "    pm.expect(json).to.have.property('id');",
+                      "    pm.expect(json).to.have.property('name');",
+                      "    pm.expect(json).to.have.property('type');",
+                      "    pm.expect(json).to.have.property('location');",
+                      "    pm.expect(json).to.have.property('value');",
+                      "    pm.expect(json).to.have.property('unit');",
+                      "    pm.expect(json).to.have.property('status');",
+                      "    pm.expect(json).to.have.property('last_updated');",
+                      "    pm.expect(json).to.have.property('created_at');",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{appUrl}}/api/v1/sensors/{{sensorId}}",
+                  "host": [
+                    "{{appUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sensors",
+                    "{{sensorId}}"
+                  ]
+                },
+                "description": "Retrieve a specific sensor by ID with live temperature"
+              },
+              "response": [
+                {
+                  "name": "Get Sensor by ID",
+                  "originalRequest": {
+                    "method": "GET",
+                    "header": [],
+                    "url": {
+                      "raw": "{{appUrl}}/api/v1/sensors/{{sensorId}}",
+                      "host": [
+                        "{{appUrl}}"
+                      ],
+                      "path": [
                         "api",
                         "v1",
                         "sensors",
-                        "1"
-                    ]
-                },
-                "description": "Update an existing sensor"
+                        "{{sensorId}}"
+                      ]
+                    }
+                  },
+                  "status": "OK",
+                  "code": 200,
+                  "_postman_previewlanguage": null,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json; charset=utf-8"
+                    },
+                    {
+                      "key": "Date",
+                      "value": "Fri, 03 Apr 2026 23:58:04 GMT"
+                    },
+                    {
+                      "key": "Content-Length",
+                      "value": "240"
+                    }
+                  ],
+                  "cookie": [],
+                  "body": "{\n    \"id\": 2,\n    \"name\": \"Living Room Temperature\",\n    \"type\": \"temperature\",\n    \"location\": \"Living Room\",\n    \"value\": 27.664904475737497,\n    \"unit\": \"Celsius\",\n    \"status\": \"active\",\n    \"last_updated\": \"2026-04-03T23:58:04.606716166Z\",\n    \"created_at\": \"2026-04-03T23:53:10.158863Z\"\n}"
+                }
+              ]
             },
-            "response": []
-        },
-        {
-            "name": "Delete Sensor",
-            "request": {
+            {
+              "name": "Update Sensor",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status code is 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('Sensor name is updated', function () {",
+                      "    var json = pm.response.json();",
+                      "    pm.expect(json.name).to.eql('Updated Living Room Temp');",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"name\": \"Updated Living Room Temp\",\n    \"type\": \"temperature\",\n    \"location\": \"Living Room\",\n    \"unit\": \"Celsius\"\n}"
+                },
+                "url": {
+                  "raw": "{{appUrl}}/api/v1/sensors/{{sensorId}}",
+                  "host": [
+                    "{{appUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sensors",
+                    "{{sensorId}}"
+                  ]
+                },
+                "description": "Update an existing sensor's metadata"
+              },
+              "response": [
+                {
+                  "name": "Update Sensor",
+                  "originalRequest": {
+                    "method": "PUT",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n    \"name\": \"Updated Living Room Temp\",\n    \"type\": \"temperature\",\n    \"location\": \"Living Room\",\n    \"unit\": \"Celsius\"\n}"
+                    },
+                    "url": {
+                      "raw": "{{appUrl}}/api/v1/sensors/{{sensorId}}",
+                      "host": [
+                        "{{appUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "v1",
+                        "sensors",
+                        "{{sensorId}}"
+                      ]
+                    }
+                  },
+                  "status": "OK",
+                  "code": 200,
+                  "_postman_previewlanguage": null,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json; charset=utf-8"
+                    },
+                    {
+                      "key": "Date",
+                      "value": "Fri, 03 Apr 2026 23:58:24 GMT"
+                    },
+                    {
+                      "key": "Content-Length",
+                      "value": "223"
+                    }
+                  ],
+                  "cookie": [],
+                  "body": "{\n    \"id\": 2,\n    \"name\": \"Updated Living Room Temp\",\n    \"type\": \"temperature\",\n    \"location\": \"Living Room\",\n    \"value\": 0,\n    \"unit\": \"Celsius\",\n    \"status\": \"inactive\",\n    \"last_updated\": \"2026-04-03T23:58:24.802361Z\",\n    \"created_at\": \"2026-04-03T23:53:10.158863Z\"\n}"
+                }
+              ]
+            },
+            {
+              "name": "Update Sensor Value — Normal",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status code is 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('Response confirms update', function () {",
+                      "    var json = pm.response.json();",
+                      "    pm.expect(json.message).to.eql('Sensor value updated successfully');",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"value\": 22.5,\n    \"status\": \"active\"\n}"
+                },
+                "url": {
+                  "raw": "{{appUrl}}/api/v1/sensors/{{sensorId}}/value",
+                  "host": [
+                    "{{appUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sensors",
+                    "{{sensorId}}",
+                    "value"
+                  ]
+                },
+                "description": "Update sensor value to a normal reading (22.5). Also publishes a telemetry measurement to Kafka (fire-and-forget)."
+              },
+              "response": [
+                {
+                  "name": "Update Sensor Value — Normal",
+                  "originalRequest": {
+                    "method": "PATCH",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n    \"value\": 22.5,\n    \"status\": \"active\"\n}"
+                    },
+                    "url": {
+                      "raw": "{{appUrl}}/api/v1/sensors/{{sensorId}}/value",
+                      "host": [
+                        "{{appUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "v1",
+                        "sensors",
+                        "{{sensorId}}",
+                        "value"
+                      ]
+                    }
+                  },
+                  "status": "OK",
+                  "code": 200,
+                  "_postman_previewlanguage": null,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json; charset=utf-8"
+                    },
+                    {
+                      "key": "Date",
+                      "value": "Fri, 03 Apr 2026 23:58:48 GMT"
+                    },
+                    {
+                      "key": "Content-Length",
+                      "value": "47"
+                    }
+                  ],
+                  "cookie": [],
+                  "body": "{\n    \"message\": \"Sensor value updated successfully\"\n}"
+                }
+              ]
+            },
+            {
+              "name": "Update Sensor Value — Zero (edge case)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status code is 200 — zero value accepted', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('Response confirms update', function () {",
+                      "    var json = pm.response.json();",
+                      "    pm.expect(json.message).to.eql('Sensor value updated successfully');",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"value\": 0.0,\n    \"status\": \"active\"\n}"
+                },
+                "url": {
+                  "raw": "{{appUrl}}/api/v1/sensors/{{sensorId}}/value",
+                  "host": [
+                    "{{appUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sensors",
+                    "{{sensorId}}",
+                    "value"
+                  ]
+                },
+                "description": "Edge case: value=0.0 must be accepted (not rejected as 'missing'). Uses *float64 pointer internally."
+              },
+              "response": [
+                {
+                  "name": "Update Sensor Value — Zero (edge case)",
+                  "originalRequest": {
+                    "method": "PATCH",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n    \"value\": 0.0,\n    \"status\": \"active\"\n}"
+                    },
+                    "url": {
+                      "raw": "{{appUrl}}/api/v1/sensors/{{sensorId}}/value",
+                      "host": [
+                        "{{appUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "v1",
+                        "sensors",
+                        "{{sensorId}}",
+                        "value"
+                      ]
+                    }
+                  },
+                  "status": "OK",
+                  "code": 200,
+                  "_postman_previewlanguage": null,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json; charset=utf-8"
+                    },
+                    {
+                      "key": "Date",
+                      "value": "Fri, 03 Apr 2026 23:59:22 GMT"
+                    },
+                    {
+                      "key": "Content-Length",
+                      "value": "47"
+                    }
+                  ],
+                  "cookie": [],
+                  "body": "{\n    \"message\": \"Sensor value updated successfully\"\n}"
+                }
+              ]
+            },
+            {
+              "name": "Update Sensor Value — Extreme (triggers anomaly)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status code is 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('Response confirms update', function () {",
+                      "    var json = pm.response.json();",
+                      "    pm.expect(json.message).to.eql('Sensor value updated successfully');",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"value\": 50.0,\n    \"status\": \"active\"\n}"
+                },
+                "url": {
+                  "raw": "{{appUrl}}/api/v1/sensors/{{sensorId}}/value",
+                  "host": [
+                    "{{appUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sensors",
+                    "{{sensorId}}",
+                    "value"
+                  ]
+                },
+                "description": "Extreme value (50 > threshold 40). Publishes to Kafka, which triggers anomaly detection in telemetry-service. The anomaly is stored in TimescaleDB and published to the anomaly.detected topic."
+              },
+              "response": [
+                {
+                  "name": "Update Sensor Value — Extreme (triggers anomaly)",
+                  "originalRequest": {
+                    "method": "PATCH",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n    \"value\": 50.0,\n    \"status\": \"active\"\n}"
+                    },
+                    "url": {
+                      "raw": "{{appUrl}}/api/v1/sensors/{{sensorId}}/value",
+                      "host": [
+                        "{{appUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "v1",
+                        "sensors",
+                        "{{sensorId}}",
+                        "value"
+                      ]
+                    }
+                  },
+                  "status": "OK",
+                  "code": 200,
+                  "_postman_previewlanguage": null,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json; charset=utf-8"
+                    },
+                    {
+                      "key": "Date",
+                      "value": "Fri, 03 Apr 2026 23:59:52 GMT"
+                    },
+                    {
+                      "key": "Content-Length",
+                      "value": "47"
+                    }
+                  ],
+                  "cookie": [],
+                  "body": "{\n    \"message\": \"Sensor value updated successfully\"\n}"
+                }
+              ]
+            },
+            {
+              "name": "Get Temperature by Location",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status code is 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('Response contains temperature data', function () {",
+                      "    var json = pm.response.json();",
+                      "    pm.expect(json).to.have.property('location');",
+                      "    pm.expect(json).to.have.property('value');",
+                      "    pm.expect(json).to.have.property('unit');",
+                      "    pm.expect(json.value).to.be.a('number');",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{appUrl}}/api/v1/sensors/temperature/Living Room",
+                  "host": [
+                    "{{appUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sensors",
+                    "temperature",
+                    "Living Room"
+                  ]
+                },
+                "description": "Get live temperature for a location via the smart_home app (proxied to temperature-api)"
+              },
+              "response": [
+                {
+                  "name": "Get Temperature by Location",
+                  "originalRequest": {
+                    "method": "GET",
+                    "header": [],
+                    "url": {
+                      "raw": "{{appUrl}}/api/v1/sensors/temperature/Living Room",
+                      "host": [
+                        "{{appUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "v1",
+                        "sensors",
+                        "temperature",
+                        "Living Room"
+                      ]
+                    }
+                  },
+                  "status": "OK",
+                  "code": 200,
+                  "_postman_previewlanguage": null,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json; charset=utf-8"
+                    },
+                    {
+                      "key": "Date",
+                      "value": "Sat, 04 Apr 2026 00:15:40 GMT"
+                    },
+                    {
+                      "key": "Content-Length",
+                      "value": "184"
+                    }
+                  ],
+                  "cookie": [],
+                  "body": "{\n    \"description\": \"Temperature reading for Living Room\",\n    \"location\": \"Living Room\",\n    \"status\": \"active\",\n    \"timestamp\": \"2026-04-04T00:15:40.21847896Z\",\n    \"unit\": \"Celsius\",\n    \"value\": 20.314011520104483\n}"
+                }
+              ]
+            },
+            {
+              "name": "Delete Sensor",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status code is 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('Response confirms deletion', function () {",
+                      "    var json = pm.response.json();",
+                      "    pm.expect(json.message).to.eql('Sensor deleted successfully');",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
                 "method": "DELETE",
                 "header": [],
                 "url": {
-                    "raw": "http://localhost:8080/api/v1/sensors/1",
-                    "protocol": "http",
-                    "host": [
-                        "localhost"
-                    ],
-                    "port": "8080",
-                    "path": [
+                  "raw": "{{appUrl}}/api/v1/sensors/{{sensorId2}}",
+                  "host": [
+                    "{{appUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sensors",
+                    "{{sensorId2}}"
+                  ]
+                },
+                "description": "Delete the second sensor (Kitchen) to verify delete works"
+              },
+              "response": [
+                {
+                  "name": "Delete Sensor",
+                  "originalRequest": {
+                    "method": "DELETE",
+                    "header": [],
+                    "url": {
+                      "raw": "{{appUrl}}/api/v1/sensors/{{sensorId2}}",
+                      "host": [
+                        "{{appUrl}}"
+                      ],
+                      "path": [
                         "api",
                         "v1",
                         "sensors",
-                        "1"
-                    ]
-                },
-                "description": "Delete a sensor"
-            },
-            "response": []
+                        "{{sensorId2}}"
+                      ]
+                    }
+                  },
+                  "status": "OK",
+                  "code": 200,
+                  "_postman_previewlanguage": null,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json; charset=utf-8"
+                    },
+                    {
+                      "key": "Date",
+                      "value": "Sat, 04 Apr 2026 00:15:49 GMT"
+                    },
+                    {
+                      "key": "Content-Length",
+                      "value": "41"
+                    }
+                  ],
+                  "cookie": [],
+                  "body": "{\n    \"message\": \"Sensor deleted successfully\"\n}"
+                }
+              ]
+            }
+          ]
         },
         {
-            "name": "Update Sensor Value",
-            "request": {
-                "method": "PATCH",
-                "header": [
-                    {
-                        "key": "Content-Type",
-                        "value": "application/json"
+          "name": "Fail Path",
+          "item": [
+            {
+              "name": "Get Sensor — Invalid ID (not a number)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status code is 400', function () {",
+                      "    pm.response.to.have.status(400);",
+                      "});",
+                      "",
+                      "pm.test('Error message present', function () {",
+                      "    var json = pm.response.json();",
+                      "    pm.expect(json).to.have.property('error');",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{appUrl}}/api/v1/sensors/abc",
+                  "host": [
+                    "{{appUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sensors",
+                    "abc"
+                  ]
+                },
+                "description": "Attempt to get a sensor with a non-numeric ID. Expects 400 Bad Request."
+              },
+              "response": [
+                {
+                  "name": "Get Sensor — Invalid ID (not a number)",
+                  "originalRequest": {
+                    "method": "GET",
+                    "header": [],
+                    "url": {
+                      "raw": "{{appUrl}}/api/v1/sensors/abc",
+                      "host": [
+                        "{{appUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "v1",
+                        "sensors",
+                        "abc"
+                      ]
                     }
+                  },
+                  "status": "Bad Request",
+                  "code": 400,
+                  "_postman_previewlanguage": null,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json; charset=utf-8"
+                    },
+                    {
+                      "key": "Date",
+                      "value": "Sat, 04 Apr 2026 00:16:42 GMT"
+                    },
+                    {
+                      "key": "Content-Length",
+                      "value": "29"
+                    }
+                  ],
+                  "cookie": [],
+                  "body": "{\n    \"error\": \"Invalid sensor ID\"\n}"
+                }
+              ]
+            },
+            {
+              "name": "Get Sensor — Not Found (ID=99999)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status code is 404', function () {",
+                      "    pm.response.to.have.status(404);",
+                      "});",
+                      "",
+                      "pm.test('Error message present', function () {",
+                      "    var json = pm.response.json();",
+                      "    pm.expect(json.error).to.include('not found');",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{appUrl}}/api/v1/sensors/99999",
+                  "host": [
+                    "{{appUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sensors",
+                    "99999"
+                  ]
+                },
+                "description": "Attempt to get a sensor that doesn't exist. Expects 404 Not Found."
+              },
+              "response": [
+                {
+                  "name": "Get Sensor — Not Found (ID=99999)",
+                  "originalRequest": {
+                    "method": "GET",
+                    "header": [],
+                    "url": {
+                      "raw": "{{appUrl}}/api/v1/sensors/99999",
+                      "host": [
+                        "{{appUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "v1",
+                        "sensors",
+                        "99999"
+                      ]
+                    }
+                  },
+                  "status": "Not Found",
+                  "code": 404,
+                  "_postman_previewlanguage": null,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json; charset=utf-8"
+                    },
+                    {
+                      "key": "Date",
+                      "value": "Sat, 04 Apr 2026 00:16:51 GMT"
+                    },
+                    {
+                      "key": "Content-Length",
+                      "value": "28"
+                    }
+                  ],
+                  "cookie": [],
+                  "body": "{\n    \"error\": \"Sensor not found\"\n}"
+                }
+              ]
+            },
+            {
+              "name": "Create Sensor — Missing required field (name)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status code is 400', function () {",
+                      "    pm.response.to.have.status(400);",
+                      "});",
+                      "",
+                      "pm.test('Error message present', function () {",
+                      "    var json = pm.response.json();",
+                      "    pm.expect(json).to.have.property('error');",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
                 ],
                 "body": {
-                    "mode": "raw",
-                    "raw": "{\n    \"value\": 22.5,\n    \"status\": \"active\"\n}"
+                  "mode": "raw",
+                  "raw": "{\n    \"type\": \"temperature\",\n    \"location\": \"Living Room\"\n}"
                 },
                 "url": {
-                    "raw": "http://localhost:8080/api/v1/sensors/1/value",
-                    "protocol": "http",
-                    "host": [
-                        "localhost"
+                  "raw": "{{appUrl}}/api/v1/sensors",
+                  "host": [
+                    "{{appUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sensors"
+                  ]
+                },
+                "description": "Create sensor without the required 'name' field. Expects 400 Bad Request."
+              },
+              "response": [
+                {
+                  "name": "Create Sensor — Missing required field (name)",
+                  "originalRequest": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
                     ],
-                    "port": "8080",
-                    "path": [
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n    \"type\": \"temperature\",\n    \"location\": \"Living Room\"\n}"
+                    },
+                    "url": {
+                      "raw": "{{appUrl}}/api/v1/sensors",
+                      "host": [
+                        "{{appUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "v1",
+                        "sensors"
+                      ]
+                    }
+                  },
+                  "status": "Bad Request",
+                  "code": 400,
+                  "_postman_previewlanguage": null,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json; charset=utf-8"
+                    },
+                    {
+                      "key": "Date",
+                      "value": "Sat, 04 Apr 2026 00:16:58 GMT"
+                    },
+                    {
+                      "key": "Content-Length",
+                      "value": "99"
+                    }
+                  ],
+                  "cookie": [],
+                  "body": "{\n    \"error\": \"Key: 'SensorCreate.Name' Error:Field validation for 'Name' failed on the 'required' tag\"\n}"
+                }
+              ]
+            },
+            {
+              "name": "Create Sensor — Missing required field (type)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status code is 400', function () {",
+                      "    pm.response.to.have.status(400);",
+                      "});",
+                      "",
+                      "pm.test('Error message present', function () {",
+                      "    var json = pm.response.json();",
+                      "    pm.expect(json).to.have.property('error');",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"name\": \"Test Sensor\",\n    \"location\": \"Living Room\"\n}"
+                },
+                "url": {
+                  "raw": "{{appUrl}}/api/v1/sensors",
+                  "host": [
+                    "{{appUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sensors"
+                  ]
+                },
+                "description": "Create sensor without the required 'type' field. Expects 400 Bad Request."
+              },
+              "response": [
+                {
+                  "name": "Create Sensor — Missing required field (type)",
+                  "originalRequest": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n    \"name\": \"Test Sensor\",\n    \"location\": \"Living Room\"\n}"
+                    },
+                    "url": {
+                      "raw": "{{appUrl}}/api/v1/sensors",
+                      "host": [
+                        "{{appUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "v1",
+                        "sensors"
+                      ]
+                    }
+                  },
+                  "status": "Bad Request",
+                  "code": 400,
+                  "_postman_previewlanguage": null,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json; charset=utf-8"
+                    },
+                    {
+                      "key": "Date",
+                      "value": "Sat, 04 Apr 2026 00:17:05 GMT"
+                    },
+                    {
+                      "key": "Content-Length",
+                      "value": "99"
+                    }
+                  ],
+                  "cookie": [],
+                  "body": "{\n    \"error\": \"Key: 'SensorCreate.Type' Error:Field validation for 'Type' failed on the 'required' tag\"\n}"
+                }
+              ]
+            },
+            {
+              "name": "Create Sensor — Empty body",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status code is 400', function () {",
+                      "    pm.response.to.have.status(400);",
+                      "});",
+                      "",
+                      "pm.test('Error message present', function () {",
+                      "    var json = pm.response.json();",
+                      "    pm.expect(json).to.have.property('error');",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}"
+                },
+                "url": {
+                  "raw": "{{appUrl}}/api/v1/sensors",
+                  "host": [
+                    "{{appUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sensors"
+                  ]
+                },
+                "description": "Create sensor with an empty JSON body. Expects 400 Bad Request."
+              },
+              "response": [
+                {
+                  "name": "Create Sensor — Empty body",
+                  "originalRequest": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{}"
+                    },
+                    "url": {
+                      "raw": "{{appUrl}}/api/v1/sensors",
+                      "host": [
+                        "{{appUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "v1",
+                        "sensors"
+                      ]
+                    }
+                  },
+                  "status": "Bad Request",
+                  "code": 400,
+                  "_postman_previewlanguage": null,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json; charset=utf-8"
+                    },
+                    {
+                      "key": "Date",
+                      "value": "Sat, 04 Apr 2026 00:17:11 GMT"
+                    },
+                    {
+                      "key": "Content-Length",
+                      "value": "285"
+                    }
+                  ],
+                  "cookie": [],
+                  "body": "{\n    \"error\": \"Key: 'SensorCreate.Name' Error:Field validation for 'Name' failed on the 'required' tag\\nKey: 'SensorCreate.Type' Error:Field validation for 'Type' failed on the 'required' tag\\nKey: 'SensorCreate.Location' Error:Field validation for 'Location' failed on the 'required' tag\"\n}"
+                }
+              ]
+            },
+            {
+              "name": "Update Sensor — Invalid ID",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status code is 400', function () {",
+                      "    pm.response.to.have.status(400);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"name\": \"Test\",\n    \"type\": \"temperature\",\n    \"location\": \"Room\"\n}"
+                },
+                "url": {
+                  "raw": "{{appUrl}}/api/v1/sensors/not-a-number",
+                  "host": [
+                    "{{appUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sensors",
+                    "not-a-number"
+                  ]
+                },
+                "description": "Update sensor with non-numeric ID. Expects 400."
+              },
+              "response": [
+                {
+                  "name": "Update Sensor — Invalid ID",
+                  "originalRequest": {
+                    "method": "PUT",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n    \"name\": \"Test\",\n    \"type\": \"temperature\",\n    \"location\": \"Room\"\n}"
+                    },
+                    "url": {
+                      "raw": "{{appUrl}}/api/v1/sensors/not-a-number",
+                      "host": [
+                        "{{appUrl}}"
+                      ],
+                      "path": [
                         "api",
                         "v1",
                         "sensors",
-                        "1",
-                        "value"
-                    ]
-                },
-                "description": "Update a sensor's value and status"
+                        "not-a-number"
+                      ]
+                    }
+                  },
+                  "status": "Bad Request",
+                  "code": 400,
+                  "_postman_previewlanguage": null,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json; charset=utf-8"
+                    },
+                    {
+                      "key": "Date",
+                      "value": "Sat, 04 Apr 2026 00:17:18 GMT"
+                    },
+                    {
+                      "key": "Content-Length",
+                      "value": "29"
+                    }
+                  ],
+                  "cookie": [],
+                  "body": "{\n    \"error\": \"Invalid sensor ID\"\n}"
+                }
+              ]
             },
-            "response": []
-        }
-    ],
-    "event": [
-        {
-            "listen": "prerequest",
-            "script": {
-                "type": "text/javascript",
-                "exec": [
-                    ""
-                ]
+            {
+              "name": "Update Sensor Value — Missing value field",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status code is 400', function () {",
+                      "    pm.response.to.have.status(400);",
+                      "});",
+                      "",
+                      "pm.test('Error message present', function () {",
+                      "    var json = pm.response.json();",
+                      "    pm.expect(json).to.have.property('error');",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"status\": \"active\"\n}"
+                },
+                "url": {
+                  "raw": "{{appUrl}}/api/v1/sensors/{{sensorId}}/value",
+                  "host": [
+                    "{{appUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sensors",
+                    "{{sensorId}}",
+                    "value"
+                  ]
+                },
+                "description": "Update sensor value without the required 'value' field. Expects 400 Bad Request."
+              },
+              "response": [
+                {
+                  "name": "Update Sensor Value — Missing value field",
+                  "originalRequest": {
+                    "method": "PATCH",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n    \"status\": \"active\"\n}"
+                    },
+                    "url": {
+                      "raw": "{{appUrl}}/api/v1/sensors/{{sensorId}}/value",
+                      "host": [
+                        "{{appUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "v1",
+                        "sensors",
+                        "{{sensorId}}",
+                        "value"
+                      ]
+                    }
+                  },
+                  "status": "Bad Request",
+                  "code": 400,
+                  "_postman_previewlanguage": null,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json; charset=utf-8"
+                    },
+                    {
+                      "key": "Date",
+                      "value": "Sat, 04 Apr 2026 00:17:35 GMT"
+                    },
+                    {
+                      "key": "Content-Length",
+                      "value": "88"
+                    }
+                  ],
+                  "cookie": [],
+                  "body": "{\n    \"error\": \"Key: 'Value' Error:Field validation for 'Value' failed on the 'required' tag\"\n}"
+                }
+              ]
+            },
+            {
+              "name": "Update Sensor Value — Missing status field",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status code is 400', function () {",
+                      "    pm.response.to.have.status(400);",
+                      "});",
+                      "",
+                      "pm.test('Error message present', function () {",
+                      "    var json = pm.response.json();",
+                      "    pm.expect(json).to.have.property('error');",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"value\": 22.5\n}"
+                },
+                "url": {
+                  "raw": "{{appUrl}}/api/v1/sensors/{{sensorId}}/value",
+                  "host": [
+                    "{{appUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sensors",
+                    "{{sensorId}}",
+                    "value"
+                  ]
+                },
+                "description": "Update sensor value without the required 'status' field. Expects 400 Bad Request."
+              },
+              "response": [
+                {
+                  "name": "Update Sensor Value — Missing status field",
+                  "originalRequest": {
+                    "method": "PATCH",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n    \"value\": 22.5\n}"
+                    },
+                    "url": {
+                      "raw": "{{appUrl}}/api/v1/sensors/{{sensorId}}/value",
+                      "host": [
+                        "{{appUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "v1",
+                        "sensors",
+                        "{{sensorId}}",
+                        "value"
+                      ]
+                    }
+                  },
+                  "status": "Bad Request",
+                  "code": 400,
+                  "_postman_previewlanguage": null,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json; charset=utf-8"
+                    },
+                    {
+                      "key": "Date",
+                      "value": "Sat, 04 Apr 2026 00:17:57 GMT"
+                    },
+                    {
+                      "key": "Content-Length",
+                      "value": "90"
+                    }
+                  ],
+                  "cookie": [],
+                  "body": "{\n    \"error\": \"Key: 'Status' Error:Field validation for 'Status' failed on the 'required' tag\"\n}"
+                }
+              ]
+            },
+            {
+              "name": "Update Sensor Value — Sensor Not Found",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status code is 404', function () {",
+                      "    pm.response.to.have.status(404);",
+                      "});",
+                      "",
+                      "pm.test('Error message present', function () {",
+                      "    var json = pm.response.json();",
+                      "    pm.expect(json.error).to.include('not found');",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"value\": 22.5,\n    \"status\": \"active\"\n}"
+                },
+                "url": {
+                  "raw": "{{appUrl}}/api/v1/sensors/99999/value",
+                  "host": [
+                    "{{appUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sensors",
+                    "99999",
+                    "value"
+                  ]
+                },
+                "description": "Update value of a sensor that doesn't exist. Expects 404 Not Found."
+              },
+              "response": [
+                {
+                  "name": "Update Sensor Value — Sensor Not Found",
+                  "originalRequest": {
+                    "method": "PATCH",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n    \"value\": 22.5,\n    \"status\": \"active\"\n}"
+                    },
+                    "url": {
+                      "raw": "{{appUrl}}/api/v1/sensors/99999/value",
+                      "host": [
+                        "{{appUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "v1",
+                        "sensors",
+                        "99999",
+                        "value"
+                      ]
+                    }
+                  },
+                  "status": "Not Found",
+                  "code": 404,
+                  "_postman_previewlanguage": null,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json; charset=utf-8"
+                    },
+                    {
+                      "key": "Date",
+                      "value": "Sat, 04 Apr 2026 00:18:05 GMT"
+                    },
+                    {
+                      "key": "Content-Length",
+                      "value": "28"
+                    }
+                  ],
+                  "cookie": [],
+                  "body": "{\n    \"error\": \"Sensor not found\"\n}"
+                }
+              ]
+            },
+            {
+              "name": "Delete Sensor — Not Found",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status code is 404', function () {",
+                      "    pm.response.to.have.status(404);",
+                      "});",
+                      "",
+                      "pm.test('Error message present', function () {",
+                      "    var json = pm.response.json();",
+                      "    pm.expect(json.error).to.include('not found');",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{appUrl}}/api/v1/sensors/99999",
+                  "host": [
+                    "{{appUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sensors",
+                    "99999"
+                  ]
+                },
+                "description": "Delete a sensor that doesn't exist. Expects 404 Not Found."
+              },
+              "response": [
+                {
+                  "name": "Delete Sensor — Not Found",
+                  "originalRequest": {
+                    "method": "DELETE",
+                    "header": [],
+                    "url": {
+                      "raw": "{{appUrl}}/api/v1/sensors/99999",
+                      "host": [
+                        "{{appUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "v1",
+                        "sensors",
+                        "99999"
+                      ]
+                    }
+                  },
+                  "status": "Not Found",
+                  "code": 404,
+                  "_postman_previewlanguage": null,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json; charset=utf-8"
+                    },
+                    {
+                      "key": "Date",
+                      "value": "Sat, 04 Apr 2026 00:18:12 GMT"
+                    },
+                    {
+                      "key": "Content-Length",
+                      "value": "28"
+                    }
+                  ],
+                  "cookie": [],
+                  "body": "{\n    \"error\": \"Sensor not found\"\n}"
+                }
+              ]
+            },
+            {
+              "name": "Delete Sensor — Invalid ID",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status code is 400', function () {",
+                      "    pm.response.to.have.status(400);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{appUrl}}/api/v1/sensors/xyz",
+                  "host": [
+                    "{{appUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sensors",
+                    "xyz"
+                  ]
+                },
+                "description": "Delete sensor with non-numeric ID. Expects 400 Bad Request."
+              },
+              "response": [
+                {
+                  "name": "Delete Sensor — Invalid ID",
+                  "originalRequest": {
+                    "method": "DELETE",
+                    "header": [],
+                    "url": {
+                      "raw": "{{appUrl}}/api/v1/sensors/xyz",
+                      "host": [
+                        "{{appUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "v1",
+                        "sensors",
+                        "xyz"
+                      ]
+                    }
+                  },
+                  "status": "Bad Request",
+                  "code": 400,
+                  "_postman_previewlanguage": null,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json; charset=utf-8"
+                    },
+                    {
+                      "key": "Date",
+                      "value": "Sat, 04 Apr 2026 00:18:20 GMT"
+                    },
+                    {
+                      "key": "Content-Length",
+                      "value": "29"
+                    }
+                  ],
+                  "cookie": [],
+                  "body": "{\n    \"error\": \"Invalid sensor ID\"\n}"
+                }
+              ]
             }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Temperature API (8081)",
+      "item": [
+        {
+          "name": "Happy Path",
+          "item": [
+            {
+              "name": "Get Temperature by Location",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status code is 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('Response contains temperature fields', function () {",
+                      "    var json = pm.response.json();",
+                      "    pm.expect(json).to.have.property('value');",
+                      "    pm.expect(json.value).to.be.a('number');",
+                      "    pm.expect(json.value).to.be.at.least(15.0);",
+                      "    pm.expect(json.value).to.be.at.most(35.0);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{temperatureApiUrl}}/temperature?location=Living Room",
+                  "host": [
+                    "{{temperatureApiUrl}}"
+                  ],
+                  "path": [
+                    "temperature"
+                  ],
+                  "query": [
+                    {
+                      "key": "location",
+                      "value": "Living Room"
+                    }
+                  ]
+                },
+                "description": "Get a random temperature reading for a given location. Returns a new random value on each call (range: 15.0-35.0)."
+              },
+              "response": [
+                {
+                  "name": "Get Temperature by Location",
+                  "originalRequest": {
+                    "method": "GET",
+                    "header": [],
+                    "url": {
+                      "raw": "{{temperatureApiUrl}}/temperature?location=Living Room",
+                      "host": [
+                        "{{temperatureApiUrl}}"
+                      ],
+                      "path": [
+                        "temperature"
+                      ],
+                      "query": [
+                        {
+                          "key": "location",
+                          "value": "Living Room"
+                        }
+                      ]
+                    }
+                  },
+                  "status": "OK",
+                  "code": 200,
+                  "_postman_previewlanguage": null,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    },
+                    {
+                      "key": "Date",
+                      "value": "Sat, 04 Apr 2026 00:12:37 GMT"
+                    },
+                    {
+                      "key": "Content-Length",
+                      "value": "244"
+                    }
+                  ],
+                  "cookie": [],
+                  "body": "{\n    \"value\": 27.593837842214,\n    \"unit\": \"Celsius\",\n    \"timestamp\": \"2026-04-04T00:12:37.318030126Z\",\n    \"location\": \"Living Room\",\n    \"status\": \"active\",\n    \"sensor_id\": \"sensor-living-room\",\n    \"sensor_type\": \"temperature\",\n    \"description\": \"Temperature reading for Living Room\"\n}"
+                }
+              ]
+            },
+            {
+              "name": "Get Temperature by Sensor ID",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status code is 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('Response contains temperature value', function () {",
+                      "    var json = pm.response.json();",
+                      "    pm.expect(json).to.have.property('value');",
+                      "    pm.expect(json.value).to.be.a('number');",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{temperatureApiUrl}}/temperature/sensor-living-room",
+                  "host": [
+                    "{{temperatureApiUrl}}"
+                  ],
+                  "path": [
+                    "temperature",
+                    "sensor-living-room"
+                  ]
+                },
+                "description": "Get a random temperature reading by sensor ID. Sensor ID format: sensor-<location-kebab-case>"
+              },
+              "response": [
+                {
+                  "name": "Get Temperature by Sensor ID",
+                  "originalRequest": {
+                    "method": "GET",
+                    "header": [],
+                    "url": {
+                      "raw": "{{temperatureApiUrl}}/temperature/sensor-living-room",
+                      "host": [
+                        "{{temperatureApiUrl}}"
+                      ],
+                      "path": [
+                        "temperature",
+                        "sensor-living-room"
+                      ]
+                    }
+                  },
+                  "status": "OK",
+                  "code": 200,
+                  "_postman_previewlanguage": null,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    },
+                    {
+                      "key": "Date",
+                      "value": "Sat, 04 Apr 2026 00:12:47 GMT"
+                    },
+                    {
+                      "key": "Content-Length",
+                      "value": "260"
+                    }
+                  ],
+                  "cookie": [],
+                  "body": "{\n    \"value\": 21.00562198119459,\n    \"unit\": \"Celsius\",\n    \"timestamp\": \"2026-04-04T00:12:47.791348631Z\",\n    \"location\": \"living room\",\n    \"status\": \"active\",\n    \"sensor_id\": \"sensor-living-room\",\n    \"sensor_type\": \"temperature\",\n    \"description\": \"Temperature reading for sensor sensor-living-room\"\n}"
+                }
+              ]
+            },
+            {
+              "name": "Get Temperature — Bedroom",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status code is 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{temperatureApiUrl}}/temperature?location=Bedroom",
+                  "host": [
+                    "{{temperatureApiUrl}}"
+                  ],
+                  "path": [
+                    "temperature"
+                  ],
+                  "query": [
+                    {
+                      "key": "location",
+                      "value": "Bedroom"
+                    }
+                  ]
+                },
+                "description": "Get temperature for Bedroom location"
+              },
+              "response": [
+                {
+                  "name": "Get Temperature — Bedroom",
+                  "originalRequest": {
+                    "method": "GET",
+                    "header": [],
+                    "url": {
+                      "raw": "{{temperatureApiUrl}}/temperature?location=Bedroom",
+                      "host": [
+                        "{{temperatureApiUrl}}"
+                      ],
+                      "path": [
+                        "temperature"
+                      ],
+                      "query": [
+                        {
+                          "key": "location",
+                          "value": "Bedroom"
+                        }
+                      ]
+                    }
+                  },
+                  "status": "OK",
+                  "code": 200,
+                  "_postman_previewlanguage": null,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    },
+                    {
+                      "key": "Date",
+                      "value": "Sat, 04 Apr 2026 00:12:51 GMT"
+                    },
+                    {
+                      "key": "Content-Length",
+                      "value": "235"
+                    }
+                  ],
+                  "cookie": [],
+                  "body": "{\n    \"value\": 21.142078904634758,\n    \"unit\": \"Celsius\",\n    \"timestamp\": \"2026-04-04T00:12:51.917295216Z\",\n    \"location\": \"Bedroom\",\n    \"status\": \"active\",\n    \"sensor_id\": \"sensor-bedroom\",\n    \"sensor_type\": \"temperature\",\n    \"description\": \"Temperature reading for Bedroom\"\n}"
+                }
+              ]
+            },
+            {
+              "name": "Get Temperature — Kitchen",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status code is 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{temperatureApiUrl}}/temperature?location=Kitchen",
+                  "host": [
+                    "{{temperatureApiUrl}}"
+                  ],
+                  "path": [
+                    "temperature"
+                  ],
+                  "query": [
+                    {
+                      "key": "location",
+                      "value": "Kitchen"
+                    }
+                  ]
+                },
+                "description": "Get temperature for Kitchen location"
+              },
+              "response": [
+                {
+                  "name": "Get Temperature — Kitchen",
+                  "originalRequest": {
+                    "method": "GET",
+                    "header": [],
+                    "url": {
+                      "raw": "{{temperatureApiUrl}}/temperature?location=Kitchen",
+                      "host": [
+                        "{{temperatureApiUrl}}"
+                      ],
+                      "path": [
+                        "temperature"
+                      ],
+                      "query": [
+                        {
+                          "key": "location",
+                          "value": "Kitchen"
+                        }
+                      ]
+                    }
+                  },
+                  "status": "OK",
+                  "code": 200,
+                  "_postman_previewlanguage": null,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    },
+                    {
+                      "key": "Date",
+                      "value": "Sat, 04 Apr 2026 00:12:56 GMT"
+                    },
+                    {
+                      "key": "Content-Length",
+                      "value": "233"
+                    }
+                  ],
+                  "cookie": [],
+                  "body": "{\n    \"value\": 40.7544378405978,\n    \"unit\": \"Celsius\",\n    \"timestamp\": \"2026-04-04T00:12:56.218543218Z\",\n    \"location\": \"Kitchen\",\n    \"status\": \"active\",\n    \"sensor_id\": \"sensor-kitchen\",\n    \"sensor_type\": \"temperature\",\n    \"description\": \"Temperature reading for Kitchen\"\n}"
+                }
+              ]
+            }
+          ]
         },
         {
-            "listen": "test",
-            "script": {
-                "type": "text/javascript",
-                "exec": [
-                    ""
-                ]
+          "name": "Fail Path",
+          "item": [
+            {
+              "name": "Get Temperature — Missing location param",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status code is 400 or returns empty/error', function () {",
+                      "    pm.expect(pm.response.code).to.be.oneOf([200, 400]);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{temperatureApiUrl}}/temperature",
+                  "host": [
+                    "{{temperatureApiUrl}}"
+                  ],
+                  "path": [
+                    "temperature"
+                  ]
+                },
+                "description": "Get temperature without location parameter. Behavior depends on temperature-api implementation."
+              },
+              "response": [
+                {
+                  "name": "Get Temperature — Missing location param",
+                  "originalRequest": {
+                    "method": "GET",
+                    "header": [],
+                    "url": {
+                      "raw": "{{temperatureApiUrl}}/temperature",
+                      "host": [
+                        "{{temperatureApiUrl}}"
+                      ],
+                      "path": [
+                        "temperature"
+                      ]
+                    }
+                  },
+                  "status": "OK",
+                  "code": 200,
+                  "_postman_previewlanguage": null,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    },
+                    {
+                      "key": "Date",
+                      "value": "Sat, 04 Apr 2026 00:13:14 GMT"
+                    },
+                    {
+                      "key": "Content-Length",
+                      "value": "234"
+                    }
+                  ],
+                  "cookie": [],
+                  "body": "{\n    \"value\": 37.09133770854702,\n    \"unit\": \"Celsius\",\n    \"timestamp\": \"2026-04-04T00:13:14.859513004Z\",\n    \"location\": \"Unknown\",\n    \"status\": \"active\",\n    \"sensor_id\": \"sensor-unknown\",\n    \"sensor_type\": \"temperature\",\n    \"description\": \"Temperature reading for Unknown\"\n}"
+                }
+              ]
             }
+          ]
         }
-    ],
-    "variable": [
-        {
-            "key": "baseUrl",
-            "value": "http://localhost:8080",
-            "type": "string"
-        }
-    ]
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "appUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "temperatureApiUrl",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "sensorId",
+      "value": "1"
+    },
+    {
+      "key": "sensorId2",
+      "value": "2"
+    }
+  ]
 }

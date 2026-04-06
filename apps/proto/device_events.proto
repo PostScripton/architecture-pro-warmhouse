@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package warmhouse.events.v1;
+
+option go_package = "github.com/warmhouse/proto/events/v1;eventsv1";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// DeviceEventType перечисляет все возможные события устройства.
+enum DeviceEventType {
+  DEVICE_EVENT_TYPE_UNSPECIFIED = 0;
+  // Изменилось состояние устройства (payload, статус)
+  STATE_CHANGED     = 1;
+  // Команда принята и передана на устройство
+  COMMAND_SENT      = 2;
+  // Устройство подключилось к платформе
+  DEVICE_ONLINE     = 3;
+  // Устройство отключилось или пропало heartbeat
+  DEVICE_OFFLINE    = 4;
+  // Устройство зарегистрировано в платформе впервые
+  DEVICE_REGISTERED = 5;
+}
+
+// DeviceState хранит статус и произвольный payload устройства.
+// Используется google.protobuf.Struct для payload, поскольку каждый тип
+// устройства (термостат, замок, камера) имеет принципиально разные поля —
+// это позволяет избежать разрастания oneof и менять модели без правки схемы.
+message DeviceState {
+  // Статус соединения: "online", "offline", "error"
+  string status = 1;
+  // Произвольные поля состояния устройства (temperature, target, locked и т.д.)
+  google.protobuf.Struct payload = 2;
+}
+
+// DeviceEvent — сообщение, публикуемое Device Management Service
+// в топик Kafka `device.events` при любом изменении устройства.
+//
+// Consumers: Script Service, Notification Service.
+// Partition key: device_id (гарантирует упорядоченность событий по устройству).
+message DeviceEvent {
+  // UUID события (для идемпотентной обработки на стороне consumers)
+  string event_id = 1;
+  // UUID устройства
+  string device_id = 2;
+  // UUID дома, к которому привязано устройство
+  string home_id = 3;
+  // Тип события
+  DeviceEventType event_type = 4;
+  // Состояние устройства ДО события (пусто для DEVICE_REGISTERED)
+  DeviceState previous_state = 5;
+  // Состояние устройства ПОСЛЕ события
+  DeviceState current_state = 6;
+  // Время возникновения события на стороне платформы
+  google.protobuf.Timestamp occurred_at = 7;
+  // UUID REST-команды, вызвавшей событие (заполняется только для COMMAND_SENT)
+  string correlation_id = 8;
+}

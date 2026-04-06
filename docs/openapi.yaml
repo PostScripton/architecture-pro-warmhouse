@@ -1,0 +1,1000 @@
+openapi: 3.0.3
+
+info:
+  title: Warm House Platform API
+  version: 1.0.0
+  description: |
+    REST API платформы Warm House для управления умным домом.
+
+    Клиенты (веб/мобильное приложение) обращаются к **API Gateway** по HTTPS.
+    Шлюз валидирует JWT-токен и проксирует запросы к внутренним микросервисам
+    по gRPC. Данный документ описывает контракт **клиент ↔ шлюз**.
+
+    **Асинхронные события** (Kafka + Protobuf) описаны в `schemas/asyncapi.yaml`.
+
+servers:
+  - url: https://api.warmhouse.io/api/v1
+    description: Production
+  - url: http://localhost:8080/api/v1
+    description: Локальная разработка
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: Devices
+    description: |
+      Управление устройствами умного дома.
+      Сервис: **Device Management Service**.
+  - name: Telemetry
+    description: |
+      Показания датчиков и аномалии.
+      Сервис: **Telemetry Service**.
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+paths:
+
+  /devices:
+    post:
+      tags:
+        - Devices
+      operationId: registerDevice
+      summary: Зарегистрировать устройство
+      description: |
+        Регистрирует новое физическое устройство в платформе (онбординг).
+        Тип устройства (`type_id`) должен существовать в каталоге `device_types`.
+
+        После регистрации устройство получает статус `pending` — оно ещё
+        не привязано к конкретному дому/комнате. Привязка выполняется отдельным
+        запросом (`POST /devices/{deviceId}/bindings`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterDeviceRequest'
+            examples:
+              thermostat:
+                summary: Регистрация термостата
+                value:
+                  name: "Термостат кухня"
+                  serial_number: "SN-2024-KT-001"
+                  type_id: "a1b2c3d4-0000-0000-0000-000000000001"
+                  protocol: MQTT
+      responses:
+        '201':
+          description: Устройство успешно зарегистрировано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceCreatedResponse'
+              examples:
+                thermostat:
+                  summary: Термостат зарегистрирован
+                  value:
+                    id: "550e8400-e29b-41d4-a716-446655440000"
+                    name: "Термостат кухня"
+                    serial_number: "SN-2024-KT-001"
+                    type_id: "a1b2c3d4-0000-0000-0000-000000000001"
+                    protocol: MQTT
+                    status: pending
+                    registered_at: "2026-03-29T10:00:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Устройство с таким serial_number уже зарегистрировано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: CONFLICT
+                message: "Устройство с serial_number 'SN-2024-KT-001' уже существует"
+                details: {}
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /devices/{deviceId}:
+    get:
+      tags:
+        - Devices
+      operationId: getDevice
+      summary: Получить информацию об устройстве
+      description: |
+        Возвращает полные данные об устройстве: тип, текущее состояние
+        (статус соединения + payload от устройства) и привязку к дому/комнате.
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '200':
+          description: Данные устройства
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+              examples:
+                thermostat_online:
+                  summary: Термостат онлайн, привязан к кухне
+                  value:
+                    id: "550e8400-e29b-41d4-a716-446655440000"
+                    name: "Термостат кухня"
+                    serial_number: "SN-2024-KT-001"
+                    protocol: MQTT
+                    type:
+                      id: "a1b2c3d4-0000-0000-0000-000000000001"
+                      name: "Термостат"
+                      manufacturer: "AcmeCorp"
+                    state:
+                      status: online
+                      payload:
+                        temperature: 22.5
+                        target_temperature: 23.0
+                      updated_at: "2026-03-29T09:55:00Z"
+                    binding:
+                      home_id: "660e8400-e29b-41d4-a716-446655440000"
+                      room_id: "770e8400-e29b-41d4-a716-446655440000"
+                      bound_at: "2026-01-15T08:00:00Z"
+                    registered_at: "2026-01-14T12:00:00Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /devices/{deviceId}/commands:
+    post:
+      tags:
+        - Devices
+      operationId: sendDeviceCommand
+      summary: Отправить команду устройству
+      description: |
+        Отправляет команду физическому устройству (включить/выключить,
+        задать температуру, заблокировать и т.д.).
+
+        **Ответ 202 Accepted** — платформа приняла команду, но физическое
+        исполнение происходит асинхронно через MQTT/HTTP. Факт исполнения
+        подтверждается событием `STATE_CHANGED` в Kafka-топике `device.events`
+        (поле `correlation_id` совпадает с `command_id` из ответа).
+
+        **Доступные команды зависят от типа устройства:**
+        - `TURN_ON` / `TURN_OFF` — реле, освещение
+        - `SET_TEMPERATURE` + `payload.target_temperature` — термостаты
+        - `LOCK` / `UNLOCK` — умные замки
+        - `OPEN` / `CLOSE` — ворота, шторы
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommandRequest'
+            examples:
+              set_temperature:
+                summary: Задать целевую температуру термостату
+                value:
+                  command: SET_TEMPERATURE
+                  payload:
+                    target_temperature: 24.0
+              turn_off:
+                summary: Выключить освещение
+                value:
+                  command: TURN_OFF
+                  payload: {}
+      responses:
+        '202':
+          description: Команда принята платформой и передана на устройство
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+              examples:
+                set_temperature:
+                  summary: Команда на изменение температуры принята
+                  value:
+                    command_id: "cmd-uuid-0000-0000-000000000001"
+                    device_id: "550e8400-e29b-41d4-a716-446655440000"
+                    command: SET_TEMPERATURE
+                    payload:
+                      target_temperature: 24.0
+                    status: accepted
+                    accepted_at: "2026-03-29T10:05:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: |
+            Устройство недоступно (offline / error) — команду невозможно доставить
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: DEVICE_UNAVAILABLE
+                message: "Устройство в статусе offline. Команда не может быть отправлена."
+                details:
+                  device_status: offline
+                  last_seen_at: "2026-03-29T09:00:00Z"
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /telemetry/{deviceId}/measurements:
+    get:
+      tags:
+        - Telemetry
+      operationId: getDeviceMeasurements
+      summary: Получить исторические показания датчика
+      description: |
+        Возвращает временной ряд показаний устройства из TimescaleDB.
+        Поддерживает фильтрацию по типу метрики и агрегацию по времени.
+
+        Максимальный допустимый диапазон `from`..`to` — 90 дней.
+        Для длинных диапазонов рекомендуется использовать агрегацию.
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+        - name: from
+          in: query
+          required: true
+          description: Начало диапазона (ISO-8601, UTC)
+          schema:
+            type: string
+            format: date-time
+          example: "2026-03-29T00:00:00Z"
+        - name: to
+          in: query
+          required: true
+          description: Конец диапазона (ISO-8601, UTC)
+          schema:
+            type: string
+            format: date-time
+          example: "2026-03-29T23:59:59Z"
+        - name: metric
+          in: query
+          required: false
+          description: Фильтр по типу метрики. Если не указан — все метрики устройства.
+          schema:
+            type: string
+          example: temperature
+        - name: aggregation
+          in: query
+          required: false
+          description: |
+            Агрегация данных:
+            - `none` — сырые показания (по умолчанию)
+            - `hourly_avg` — среднее за каждый час
+            - `daily_avg` — среднее за каждые сутки
+          schema:
+            type: string
+            enum:
+              - none
+              - hourly_avg
+              - daily_avg
+            default: none
+        - name: limit
+          in: query
+          required: false
+          description: Максимальное количество записей в ответе
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+      responses:
+        '200':
+          description: Список показаний
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeasurementList'
+              examples:
+                hourly_temperature:
+                  summary: Среднечасовая температура за день
+                  value:
+                    device_id: "550e8400-e29b-41d4-a716-446655440000"
+                    from: "2026-03-29T00:00:00Z"
+                    to: "2026-03-29T23:59:59Z"
+                    metric: temperature
+                    aggregation: hourly_avg
+                    count: 3
+                    measurements:
+                      - id: "meas-uuid-0000-0000-000000000001"
+                        metric: temperature
+                        value: 21.3
+                        unit: "°C"
+                        recorded_at: "2026-03-29T01:00:00Z"
+                      - id: "meas-uuid-0000-0000-000000000002"
+                        metric: temperature
+                        value: 22.1
+                        unit: "°C"
+                        recorded_at: "2026-03-29T02:00:00Z"
+                      - id: "meas-uuid-0000-0000-000000000003"
+                        metric: temperature
+                        value: 22.5
+                        unit: "°C"
+                        recorded_at: "2026-03-29T03:00:00Z"
+        '400':
+          description: |
+            Невалидные параметры запроса (неверный формат дат,
+            `from` > `to`, диапазон превышает 90 дней)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: INVALID_TIME_RANGE
+                message: "Параметр 'from' должен быть меньше 'to'"
+                details:
+                  from: "2026-03-29T23:59:59Z"
+                  to: "2026-03-29T00:00:00Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /telemetry/{deviceId}/anomalies:
+    get:
+      tags:
+        - Telemetry
+      operationId: getDeviceAnomalies
+      summary: Получить аномалии устройства
+      description: |
+        Возвращает список аномалий, обнаруженных Telemetry Service для
+        конкретного устройства. Поддерживает фильтрацию по severity,
+        типу аномалии и статусу разрешения.
+
+        Аномалии хранятся в TimescaleDB и публикуются в Kafka-топик
+        `anomaly.detected` (см. `schemas/asyncapi.yaml`).
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+        - name: from
+          in: query
+          required: true
+          description: Начало диапазона (ISO-8601, UTC)
+          schema:
+            type: string
+            format: date-time
+          example: "2026-03-29T00:00:00Z"
+        - name: to
+          in: query
+          required: true
+          description: Конец диапазона (ISO-8601, UTC)
+          schema:
+            type: string
+            format: date-time
+          example: "2026-03-29T23:59:59Z"
+        - name: severity
+          in: query
+          required: false
+          description: Фильтр по степени критичности (если не указан — все)
+          schema:
+            type: string
+            enum:
+              - LOW
+              - MEDIUM
+              - HIGH
+              - CRITICAL
+        - name: anomaly_type
+          in: query
+          required: false
+          description: Фильтр по типу аномалии
+          schema:
+            type: string
+            enum:
+              - THRESHOLD_BREACH
+              - SPIKE
+              - CONNECTION_LOSS
+              - RAPID_CHANGE
+        - name: resolved
+          in: query
+          required: false
+          description: |
+            Фильтр по статусу разрешения:
+            - `true` — только разрешённые аномалии
+            - `false` — только активные (не разрешённые)
+            - не указан — все аномалии
+          schema:
+            type: boolean
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
+      responses:
+        '200':
+          description: Список аномалий устройства
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnomalyList'
+              examples:
+                threshold_breach:
+                  summary: Критический перегрев — активная аномалия
+                  value:
+                    device_id: "550e8400-e29b-41d4-a716-446655440000"
+                    from: "2026-03-29T00:00:00Z"
+                    to: "2026-03-29T23:59:59Z"
+                    count: 1
+                    anomalies:
+                      - id: "anom-uuid-0000-0000-000000000001"
+                        metric: temperature
+                        actual_value: 45.3
+                        expected_min: 15.0
+                        expected_max: 35.0
+                        severity: HIGH
+                        anomaly_type: THRESHOLD_BREACH
+                        detected_at: "2026-03-29T14:32:00Z"
+                        resolved_at: null
+        '400':
+          description: Невалидные параметры запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: INVALID_TIME_RANGE
+                message: "Параметр 'from' должен быть меньше 'to'"
+                details:
+                  from: "2026-03-29T23:59:59Z"
+                  to: "2026-03-29T00:00:00Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+# ---------------------------------------------------------------------------
+# Components
+# ---------------------------------------------------------------------------
+components:
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT-токен, выданный Auth Service.
+        Передаётся в заголовке: `Authorization: Bearer <token>`
+
+  parameters:
+    DeviceId:
+      name: deviceId
+      in: path
+      required: true
+      description: UUID устройства
+      schema:
+        type: string
+        format: uuid
+      example: "550e8400-e29b-41d4-a716-446655440000"
+
+  responses:
+    BadRequest:
+      description: Невалидные данные запроса
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: VALIDATION_ERROR
+            message: "Поле 'serial_number' обязательно"
+            details:
+              field: serial_number
+
+    Unauthorized:
+      description: Отсутствует или невалиден JWT-токен
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: UNAUTHORIZED
+            message: "Токен авторизации отсутствует или истёк"
+            details: {}
+
+    Forbidden:
+      description: Нет прав на выполнение операции
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: FORBIDDEN
+            message: "Недостаточно прав для управления этим устройством"
+            details: {}
+
+    NotFound:
+      description: Ресурс не найден
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: NOT_FOUND
+            message: "Устройство не найдено"
+            details: {}
+
+    InternalServerError:
+      description: Внутренняя ошибка сервера
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: INTERNAL_ERROR
+            message: "Внутренняя ошибка сервера. Попробуйте позже."
+            details: {}
+
+  schemas:
+
+    Error:
+      type: object
+      description: Стандартная структура ошибки
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Машиночитаемый код ошибки
+          example: NOT_FOUND
+        message:
+          type: string
+          description: Человекочитаемое описание ошибки
+          example: "Устройство не найдено"
+        details:
+          type: object
+          additionalProperties: true
+          description: Дополнительный контекст ошибки (зависит от типа ошибки)
+          example: {}
+
+    # --- Device schemas ---
+
+    RegisterDeviceRequest:
+      type: object
+      required:
+        - name
+        - serial_number
+        - type_id
+        - protocol
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Читаемое название устройства
+          example: "Термостат кухня"
+        serial_number:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Серийный номер с наклейки на устройстве (уникален в платформе)
+          example: "SN-2024-KT-001"
+        type_id:
+          type: string
+          format: uuid
+          description: UUID типа устройства из каталога device_types
+          example: "a1b2c3d4-0000-0000-0000-000000000001"
+        protocol:
+          type: string
+          enum:
+            - MQTT
+            - MATTER
+            - ZIGBEE
+            - HTTP
+          description: Протокол связи устройства с платформой
+          example: MQTT
+
+    DeviceCreatedResponse:
+      type: object
+      required:
+        - id
+        - name
+        - serial_number
+        - type_id
+        - protocol
+        - status
+        - registered_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        name:
+          type: string
+          example: "Термостат кухня"
+        serial_number:
+          type: string
+          example: "SN-2024-KT-001"
+        type_id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-0000-0000-0000-000000000001"
+        protocol:
+          type: string
+          enum:
+            - MQTT
+            - MATTER
+            - ZIGBEE
+            - HTTP
+          example: MQTT
+        status:
+          type: string
+          description: Статус онбординга устройства
+          enum:
+            - pending
+            - active
+            - inactive
+          example: pending
+        registered_at:
+          type: string
+          format: date-time
+          example: "2026-03-29T10:00:00Z"
+
+    Device:
+      type: object
+      description: Полные данные об устройстве
+      required:
+        - id
+        - name
+        - serial_number
+        - protocol
+        - type
+        - state
+        - registered_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        name:
+          type: string
+          example: "Термостат кухня"
+        serial_number:
+          type: string
+          example: "SN-2024-KT-001"
+        protocol:
+          type: string
+          enum:
+            - MQTT
+            - MATTER
+            - ZIGBEE
+            - HTTP
+          example: MQTT
+        type:
+          $ref: '#/components/schemas/DeviceType'
+        state:
+          $ref: '#/components/schemas/DeviceState'
+        binding:
+          $ref: '#/components/schemas/DeviceBinding'
+          nullable: true
+          description: Привязка к дому и комнате (null если не привязано)
+        registered_at:
+          type: string
+          format: date-time
+          example: "2026-01-14T12:00:00Z"
+
+    DeviceType:
+      type: object
+      required:
+        - id
+        - name
+        - manufacturer
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-0000-0000-0000-000000000001"
+        name:
+          type: string
+          example: "Термостат"
+        manufacturer:
+          type: string
+          example: "AcmeCorp"
+
+    DeviceState:
+      type: object
+      required:
+        - status
+        - updated_at
+      properties:
+        status:
+          type: string
+          enum:
+            - online
+            - offline
+            - error
+            - pending
+          description: Статус соединения устройства с платформой
+          example: online
+        payload:
+          type: object
+          additionalProperties: true
+          description: |
+            Текущие показатели устройства, специфичные для его типа.
+            Термостат: `{temperature, target_temperature}`.
+            Замок: `{locked, last_locked_by}`.
+            Реле: `{power_on, power_consumption_w}`.
+          example:
+            temperature: 22.5
+            target_temperature: 23.0
+        updated_at:
+          type: string
+          format: date-time
+          description: Время последнего обновления состояния
+          example: "2026-03-29T09:55:00Z"
+
+    DeviceBinding:
+      type: object
+      required:
+        - home_id
+        - room_id
+        - bound_at
+      properties:
+        home_id:
+          type: string
+          format: uuid
+          example: "660e8400-e29b-41d4-a716-446655440000"
+        room_id:
+          type: string
+          format: uuid
+          example: "770e8400-e29b-41d4-a716-446655440000"
+        bound_at:
+          type: string
+          format: date-time
+          example: "2026-01-15T08:00:00Z"
+
+    CommandRequest:
+      type: object
+      required:
+        - command
+      properties:
+        command:
+          type: string
+          enum:
+            - TURN_ON
+            - TURN_OFF
+            - SET_TEMPERATURE
+            - LOCK
+            - UNLOCK
+            - OPEN
+            - CLOSE
+          description: Команда для устройства (доступные команды зависят от типа устройства)
+          example: SET_TEMPERATURE
+        payload:
+          type: object
+          additionalProperties: true
+          description: Параметры команды, специфичные для команды
+          example:
+            target_temperature: 24.0
+
+    CommandResponse:
+      type: object
+      required:
+        - command_id
+        - device_id
+        - command
+        - status
+        - accepted_at
+      properties:
+        command_id:
+          type: string
+          format: uuid
+          description: UUID команды. Совпадает с `correlation_id` в событии `device.events`
+          example: "cmd-uuid-0000-0000-000000000001"
+        device_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        command:
+          type: string
+          example: SET_TEMPERATURE
+        payload:
+          type: object
+          additionalProperties: true
+          example:
+            target_temperature: 24.0
+        status:
+          type: string
+          enum:
+            - accepted
+          description: |
+            Статус `accepted` означает, что платформа приняла команду
+            и передала её на устройство. Физическое исполнение отслеживается
+            через топик `device.events` (Kafka).
+          example: accepted
+        accepted_at:
+          type: string
+          format: date-time
+          example: "2026-03-29T10:05:00Z"
+
+    # --- Telemetry schemas ---
+
+    Measurement:
+      type: object
+      required:
+        - id
+        - metric
+        - value
+        - unit
+        - recorded_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "meas-uuid-0000-0000-000000000001"
+        metric:
+          type: string
+          example: temperature
+        value:
+          type: number
+          format: double
+          example: 21.8
+        unit:
+          type: string
+          example: "°C"
+        recorded_at:
+          type: string
+          format: date-time
+          example: "2026-03-29T01:00:00Z"
+
+    MeasurementList:
+      type: object
+      required:
+        - device_id
+        - from
+        - to
+        - aggregation
+        - count
+        - measurements
+      properties:
+        device_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        from:
+          type: string
+          format: date-time
+          example: "2026-03-29T00:00:00Z"
+        to:
+          type: string
+          format: date-time
+          example: "2026-03-29T23:59:59Z"
+        metric:
+          type: string
+          nullable: true
+          description: Фильтр по метрике (null если не указан — все метрики)
+          example: temperature
+        aggregation:
+          type: string
+          enum:
+            - none
+            - hourly_avg
+            - daily_avg
+          example: hourly_avg
+        count:
+          type: integer
+          description: Общее количество записей в ответе
+          example: 10
+        measurements:
+          type: array
+          items:
+            $ref: '#/components/schemas/Measurement'
+
+    # --- Telemetry anomaly schemas ---
+
+    Anomaly:
+      type: object
+      description: Аномалия, обнаруженная Telemetry Service
+      required:
+        - id
+        - metric
+        - actual_value
+        - severity
+        - anomaly_type
+        - detected_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "anom-uuid-0000-0000-000000000001"
+        metric:
+          type: string
+          description: Тип метрики, в которой обнаружена аномалия
+          example: temperature
+        actual_value:
+          type: number
+          format: double
+          description: Фактическое значение, вызвавшее аномалию
+          example: 45.3
+        expected_min:
+          type: number
+          format: double
+          nullable: true
+          description: Нижняя граница нормального диапазона (null = не задана)
+          example: 15.0
+        expected_max:
+          type: number
+          format: double
+          nullable: true
+          description: Верхняя граница нормального диапазона (null = не задана)
+          example: 35.0
+        severity:
+          type: string
+          enum:
+            - LOW
+            - MEDIUM
+            - HIGH
+            - CRITICAL
+          example: HIGH
+        anomaly_type:
+          type: string
+          enum:
+            - THRESHOLD_BREACH
+            - SPIKE
+            - CONNECTION_LOSS
+            - RAPID_CHANGE
+          example: THRESHOLD_BREACH
+        detected_at:
+          type: string
+          format: date-time
+          example: "2026-03-29T14:32:00Z"
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Время разрешения аномалии (null — аномалия ещё активна)
+          example: null
+
+    AnomalyList:
+      type: object
+      required:
+        - device_id
+        - from
+        - to
+        - count
+        - anomalies
+      properties:
+        device_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        from:
+          type: string
+          format: date-time
+          example: "2026-03-29T00:00:00Z"
+        to:
+          type: string
+          format: date-time
+          example: "2026-03-29T23:59:59Z"
+        count:
+          type: integer
+          description: Количество аномалий в ответе
+          example: 1
+        anomalies:
+          type: array
+          items:
+            $ref: '#/components/schemas/Anomaly'

@@ -1,0 +1,128 @@
+@startuml ER_Diagram
+' ER Diagram — Warm House Platform (To-Be)
+' Logical data model: key entities, attributes and relationship types.
+
+!define PK(x) <u>x</u>
+!define FK(x) <i>x</i>
+
+hide methods
+hide stereotypes
+skinparam linetype ortho
+skinparam entity {
+    BackgroundColor #FEFECE
+    BorderColor #999999
+    ArrowColor #555555
+    FontSize 13
+}
+
+title ER Diagram — Warm House Platform (To-Be)
+
+' ─────────────────────────────────────────────
+' USER
+' ─────────────────────────────────────────────
+entity User {
+    * PK(id) : UUID
+    --
+    * email : TEXT
+    * password_hash : TEXT
+    * name : TEXT
+    * created_at : TIMESTAMPTZ
+}
+
+' ─────────────────────────────────────────────
+' HOUSE
+' ─────────────────────────────────────────────
+entity House {
+    * PK(id) : UUID
+    --
+    * FK(owner_id) : UUID
+    * name : TEXT
+    address : TEXT
+    timezone : TEXT
+    * created_at : TIMESTAMPTZ
+}
+
+' ─────────────────────────────────────────────
+' MODULE
+' Logical zone inside a house (room, floor area, etc.).
+' Groups devices by location within the house.
+' ─────────────────────────────────────────────
+entity Module {
+    * PK(id) : UUID
+    --
+    * FK(house_id) : UUID
+    * name : TEXT
+    type : TEXT
+    * created_at : TIMESTAMPTZ
+}
+
+' ─────────────────────────────────────────────
+' DEVICE TYPE
+' ─────────────────────────────────────────────
+entity DeviceType {
+    * PK(id) : UUID
+    --
+    * name : TEXT
+    * protocol : TEXT
+    manufacturer : TEXT
+    * created_at : TIMESTAMPTZ
+}
+
+' ─────────────────────────────────────────────
+' DEVICE
+' ─────────────────────────────────────────────
+entity Device {
+    * PK(id) : UUID
+    --
+    * FK(type_id) : UUID
+    * FK(house_id) : UUID
+    FK(module_id) : UUID
+    * serial_number : TEXT
+    * status : TEXT
+    * created_at : TIMESTAMPTZ
+}
+
+' ─────────────────────────────────────────────
+' TELEMETRY DATA
+' Time-series readings from device sensors.
+' Stored in TimescaleDB (hypertable by recorded_at).
+' ─────────────────────────────────────────────
+entity TelemetryData {
+    * PK(id) : UUID
+    --
+    * FK(device_id) : UUID
+    * metric : TEXT
+    * value : DOUBLE PRECISION
+    * unit : TEXT
+    * recorded_at : TIMESTAMPTZ
+}
+
+' ─────────────────────────────────────────────
+' RELATIONSHIPS
+' ─────────────────────────────────────────────
+
+' One user can own multiple houses;
+' each house belongs to exactly one owner.
+User ||--o{ House : "owns"
+
+' One house contains multiple modules (rooms/zones);
+' each module belongs to exactly one house.
+House ||--o{ Module : "contains"
+
+' One house contains multiple devices;
+' each device is bound to exactly one house.
+House ||--o{ Device : "contains"
+
+' A device may optionally be assigned to a module (room);
+' one module can contain multiple devices.
+Module |o--o{ Device : "groups"
+
+' One device type classifies multiple devices;
+' each device has exactly one type.
+DeviceType ||--o{ Device : "classifies"
+
+' One device generates multiple telemetry records;
+' each record belongs to exactly one device.
+Device ||--o{ TelemetryData : "generates"
+
+@enduml
